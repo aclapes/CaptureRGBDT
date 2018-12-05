@@ -174,7 +174,7 @@ cv::Mat depth_to_8bit(cv::Mat data)
     return img;
 }
 
-void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>> & q, bool & is_capturing)
+void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>> & q, bool & is_capturing, double & elapsed, double duration)
 {
     rs2_stream align_to = find_stream_to_align(profile.get_streams());
     rs2::align align(align_to);
@@ -223,6 +223,13 @@ void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, Sa
 
         q.enqueue(std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>(std::pair<cv::Mat,cv::Mat>(c_.clone(),d_.clone()),ts));
         std::cerr << "[RS] <PRODUCER> enqueued " << q.size() << " ..." << '\n';
+        
+        if (debug)
+        {
+            cv::rectangle(c_, cv::Point(0,0), cv::Point(int(c_.cols*(elapsed/duration)),6), cv::Scalar(0,255,0), -1);
+            cv::imshow("purthermal producer view", c_);
+            cv::waitKey(1);
+        }
     }
 }
 
@@ -357,18 +364,17 @@ int main(int argc, char * argv[]) try
         
     boost::filesystem::create_directories(parent / fs::path("rs/color/"));
     boost::filesystem::create_directories(parent / fs::path("rs/depth/"));
-    boost::filesystem::create_directories(parent / fs::path("pt/thermal/"));
-//    if (debug) boost::filesystem::create_directories(date_and_time + "/pt/thermal-dbg/");
+//    boost::filesystem::create_directories(parent / fs::path("pt/thermal/"));
         
     // Initialize adquisition cues for consumer-producer setup
     double duration = vm["duration"].as<double>(); // acquisition time in ms
     SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>> queue_rs;
-    SafeQueue<std::pair<cv::Mat,timestamp_t>> queue_pt;
+//    SafeQueue<std::pair<cv::Mat,timestamp_t>> queue_pt;
     bool is_capturing = false; // will be set to true later
 
     // Create a Pipeline - this serves as a top-level API for streaming and processing frames
     rs2::pipeline pipe_rs;
-    pt::pipeline pipe_pt;
+//    pt::pipeline pipe_pt;
     
     rs2::config cfg;
     cfg.enable_stream(RS2_STREAM_COLOR, 1280, 720, RS2_FORMAT_BGR8, vm["fps"].as<int>());
@@ -377,7 +383,7 @@ int main(int argc, char * argv[]) try
     
     // Configure and start the pipeline
     rs2::pipeline_profile profile = pipe_rs.start(cfg);
-    pipe_pt.start(); // no need for external configuration
+//    pipe_pt.start(); // no need for external configuration
     
     // hacks
     upfront_cv_window_hack();
@@ -385,25 +391,26 @@ int main(int argc, char * argv[]) try
     
     is_capturing = true;
     std::thread c_rs_thr(consume_realsense, std::ref(queue_rs), std::ref(is_capturing), parent);
-    std::thread c_pt_thr(consume_purethermal, std::ref(queue_pt), std::ref(is_capturing), parent);
+//    std::thread c_pt_thr(consume_purethermal, std::ref(queue_pt), std::ref(is_capturing), parent);
     
     /* Timer modifies the is_capturing flag after X millisecons */
     double elapsed_time = 0;
     std::thread timer_thr(timer, std::ref(is_capturing), std::ref(elapsed_time), duration);
     timer_thr.detach();
     
-    std::thread p_rs_thr(produce_realsense, std::ref(pipe_rs), std::ref(profile), std::ref(queue_rs), std::ref(is_capturing));
-    produce_purethermal(pipe_pt, queue_pt, is_capturing, elapsed_time, duration); // if debug, imshow inside needs to run in main thread
+//    std::thread p_rs_thr(produce_realsense, std::ref(pipe_rs), std::ref(profile), std::ref(queue_rs), std::ref(is_capturing));
+    produce_realsense(pipe_rs, profile, queue_rs, is_capturing, elapsed_time, duration);
+//    produce_purethermal(pipe_pt, queue_pt, is_capturing, elapsed_time, duration); // if debug, imshow inside needs to run in main thread
 
-    p_rs_thr.join();
+//    p_rs_thr.join();
     // p_pt_thr.join();
 
     pipe_rs.stop();
-    pipe_pt.stop();
+//    pipe_pt.stop();
 
     /* Wait for consumer threads to finish */
     c_rs_thr.join();
-    c_pt_thr.join();
+//    c_pt_thr.join();
 
 //    std::thread p_pt_thr(produce_purethermal, std::ref(pipe_pt), std::ref(queue_pt), std::ref(is_capturing), std::ref(elapsed_time), duration); // if debug, imshow inside needs to run in main thread
 //    produce_realsense(pipe_rs, profile, queue_rs, is_capturing);
