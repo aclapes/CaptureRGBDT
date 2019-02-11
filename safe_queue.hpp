@@ -21,7 +21,8 @@ public:
     SafeQueue(void)
     : q()
     , m()
-    , c()
+    , c_peek()
+    , c_dequeue()
     {}
     
     ~SafeQueue(void)
@@ -32,7 +33,23 @@ public:
     {
         std::lock_guard<std::mutex> lock(m);
         q.push(t);
-        c.notify_one();
+        c_peek.notify_one();
+        c_dequeue.notify_one();
+    }
+
+    T peek(int timeout_ms = 100)
+    {
+        std::unique_lock<std::mutex> lock(m);
+        if ( c_peek.wait_for(lock, std::chrono::milliseconds(timeout_ms), [this](){return !q.empty();}) ) 
+        {
+            T val = q.front();
+            return val;
+        }
+        else
+        {
+            throw std::runtime_error("Empty queue, no elements to peek.");
+        }
+        
     }
     
     // Get the "front"-element.
@@ -43,7 +60,7 @@ public:
         while(q.empty())
         {
             // release lock as long as the wait and reaquire it afterwards.
-            c.wait(lock);
+            c_dequeue.wait(lock);
         }
         T val = q.front();
         q.pop();
@@ -56,7 +73,8 @@ public:
         
         std::lock_guard<std::mutex> lock(m);
         size_val = q.size();
-        c.notify_one();
+        // c_peek.notify_one();
+        // c_dequeue.notify_one();
         
         return size_val;
     }
@@ -64,6 +82,7 @@ public:
 private:
     std::queue<T> q;
     mutable std::mutex m;
-    std::condition_variable c;
+    std::condition_variable c_dequeue;
+    std::condition_variable c_peek;
 };
 #endif /* safe_queue_h */
