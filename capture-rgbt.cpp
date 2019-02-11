@@ -299,7 +299,7 @@ int main(int argc, char * argv[]) try
     po::options_description desc("Program options");
     desc.add_options()
         ("help,h", "Print help messages")
-        ("duration,d", po::value<int>()->default_value(4000), "Duration of the recording in milliseconds (ms)")
+        ("duration,d", po::value<int>()->default_value(8000), "Duration of the recording in milliseconds (ms)")
         ("fps,s", po::value<int>()->default_value(30), "Acquisition speed (fps) of realsense (integer number 1~30)")
         ("output_dir,o", po::value<std::string>()->default_value("."), "Output directory to save acquired data");
     
