@@ -5,7 +5,7 @@ Simple recording program to simultaneously capture RealSense D435 and PureTherma
 # Dependencies
 
 ```
-librealsense
+librealsense2
 libuvc fork (from GetThermal)
 boost
 opencv3
