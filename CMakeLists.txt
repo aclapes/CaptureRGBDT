@@ -46,17 +46,17 @@ find_library(LIBUVC_FOUND uvc HINTS ${LIBRARY_DIR} REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system filesystem program_options)
 find_package(OpenCV REQUIRED)
 
-add_executable(rs-getting-started rs-getting-started.cpp pt_pipeline.hpp safe_queue.hpp pt_pipeline.hpp safe_queue.hpp)
-include_directories(rs-getting-started ${ADDITIONAL_INCLUDE_DIRS})
-#link_directories(rs-getting-started ${ADDITIONAL_LIBRARY_DIRS} ${Boost_LIBRARY_DIRS})
-target_link_libraries(rs-getting-started PRIVATE ${LIBUVC_FOUND} ${REALSENSE2_FOUND} ${Boost_LIBRARIES} ${OpenCV_LIBS})
-set_target_properties (rs-getting-started PROPERTIES FOLDER Examples)
+add_executable(capture-rgbt capture-rgbt.cpp pt_pipeline.hpp safe_queue.hpp pt_pipeline.hpp safe_queue.hpp)
+include_directories(capture-rgbt ${ADDITIONAL_INCLUDE_DIRS})
+#link_directories(capture-rgbt ${ADDITIONAL_LIBRARY_DIRS} ${Boost_LIBRARY_DIRS})
+target_link_libraries(capture-rgbt PRIVATE ${LIBUVC_FOUND} ${REALSENSE2_FOUND} ${Boost_LIBRARIES} ${OpenCV_LIBS})
+set_target_properties (capture-rgbt PROPERTIES FOLDER Examples)
 
 # Post Build script to copy realsense2.dll
 if(WIN32)
 message(STATUS "Adding Post build script to copy realsense2.dll to project's binary folder")
 message(STATUS "Will try to copy from ${DLL_DIR} to ${PROJECT_BINARY_OUTPUT_PATH}")
-add_custom_command(TARGET rs-getting-started POST_BUILD        # Adds a post-build event to rs-getting-started
+add_custom_command(TARGET capture-rgbt POST_BUILD        # Adds a post-build event to capture-rgbt
     COMMAND ${CMAKE_COMMAND} -E copy_if_different              # which executes "cmake - E copy_if_different..."
         "${DLL_DIR}/realsense2.dll"                            # <--this is in-file
         ${PROJECT_BINARY_OUTPUT_PATH})                 # <--this is out-file path
@@ -65,7 +65,7 @@ endif()
 install(
     TARGETS
 
-    rs-getting-started
+    capture-rgbt
 
     RUNTIME DESTINATION
     ${CMAKE_INSTALL_PREFIX}/bin
