@@ -17,6 +17,7 @@
 
 #include "pt_pipeline.hpp"
 #include "safe_queue.hpp"
+#include "utils.hpp"
 
 bool debug = true;
 
@@ -123,26 +124,26 @@ std::string current_time_and_date()
     return ss.str();
 }
 
-cv::Mat thermal_to_8bit(cv::Mat data)
-{
-    cv::Mat img;
-    double minVal, maxVal;
-    cv::Point minIdx, maxIdx;
+// cv::Mat thermal_to_8bit(cv::Mat data)
+// {
+//     cv::Mat img;
+//     double minVal, maxVal;
+//     cv::Point minIdx, maxIdx;
     
-    cv::normalize(data, img, 0, 65535, cv::NORM_MINMAX);
-    img.convertTo(img, CV_8U, 1/256.);
+//     cv::normalize(data, img, 0, 65535, cv::NORM_MINMAX);
+//     img.convertTo(img, CV_8U, 1/256.);
     
-    return img;
-}
+//     return img;
+// }
 
-cv::Mat depth_to_8bit(cv::Mat data)
-{
-    cv::Mat img;
+// cv::Mat depth_to_8bit(cv::Mat data)
+// {
+//     cv::Mat img;
     
-    img.convertTo(img, CV_8U, 1/256.);
+//     img.convertTo(img, CV_8U, 1/256.);
     
-    return img;
-}
+//     return img;
+// }
 
 void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>> & q, bool & is_capturing, bool verbose)
 {
@@ -176,10 +177,10 @@ void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, Sa
         rs2::depth_frame aligned_depth_frame = processed.get_depth_frame();
         
         // Print the distance
-        cv::Mat c_ = cv::Mat(cv::Size(1280,720), CV_8UC3, const_cast<void *>(other_frame.get_data()), cv::Mat::AUTO_STEP);
-        cv::Mat d_ = cv::Mat(cv::Size(1280,720), CV_16U, const_cast<void *>(aligned_depth_frame.get_data()), cv::Mat::AUTO_STEP);
+        cv::Mat c = cv::Mat(cv::Size(1280,720), CV_8UC3, const_cast<void *>(other_frame.get_data()), cv::Mat::AUTO_STEP);
+        cv::Mat d = cv::Mat(cv::Size(1280,720), CV_16U, const_cast<void *>(aligned_depth_frame.get_data()), cv::Mat::AUTO_STEP);
 
-        q.enqueue(std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>(std::pair<cv::Mat,cv::Mat>(c_.clone(),d_.clone()),ts));
+        q.enqueue(std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>(std::pair<cv::Mat,cv::Mat>(c.clone(),d.clone()),ts));
         if (verbose)
             std::cerr << "[RS] <PRODUCER> enqueued " << q.size() << " ..." << '\n';
     }
@@ -210,22 +211,25 @@ void consume_realsense(SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_
     
     int fid = 0;
     boost::format fmt("%08d");
-    std::ofstream outfile((dir / "rs.log").string(), std::ios_base::app);;
+    std::ofstream outfile((dir / "rs.log").string(), std::ios_base::app);
+
     while (is_capturing || q.size() > 0)
     {
         std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t> capture = q.dequeue();
         if (verbose)
             std::cout << "[RS] >CONSUMER< dequeued " << q.size() << " ..." << '\n';
 
-        long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(capture.second.time_since_epoch()).count();
-        fmt % fid;
-        outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
+        if (!dir.empty())
+        {
+            long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(capture.second.time_since_epoch()).count();
+            fmt % fid;
+            outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
         
-        fs::path color_dir = dir / "rs/color/";
-        fs::path depth_dir = dir / "rs/depth/";
-        cv::imwrite((color_dir / ("c_" + fmt.str() + ".jpg")).string(), capture.first.first);
-        cv::imwrite((depth_dir / ("d_" + fmt.str() + ".png")).string(), capture.first.second, compression_params);
-        
+            fs::path color_dir = dir / "rs/color/";
+            fs::path depth_dir = dir / "rs/depth/";
+            cv::imwrite((color_dir / ("c_" + fmt.str() + ".jpg")).string(), capture.first.first);
+            cv::imwrite((depth_dir / ("d_" + fmt.str() + ".png")).string(), capture.first.second, compression_params);
+        }
         fid++;
     }
 }
@@ -239,18 +243,22 @@ void consume_purethermal(SafeQueue<std::pair<cv::Mat,timestamp_t>> & q, bool & i
     int fid = 0;
     boost::format fmt("%08d");
     std::ofstream outfile((dir / "pt.log").string(), std::ios_base::app);
+    
     while (is_capturing || q.size() > 0)
     {
         std::pair<cv::Mat,timestamp_t> capture = q.dequeue();
         if (verbose)
             std::cout << "[PT] >CONSUMER< dequeued " << q.size() << " ..." << '\n';
 
-        long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(capture.second.time_since_epoch()).count();
-        fmt % fid;
-        outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
-        
-        fs::path thermal_dir = dir / "pt/thermal/";
-        cv::imwrite((thermal_dir / ("t_" + fmt.str() + ".png")).string(), capture.first, compression_params);
+        if (!dir.empty())
+        {
+            long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(capture.second.time_since_epoch()).count();
+            fmt % fid;
+            outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
+            
+            fs::path thermal_dir = dir / "pt/thermal/";
+            cv::imwrite((thermal_dir / ("t_" + fmt.str() + ".png")).string(), capture.first, compression_params);
+        }
 
         fid++;
     }
@@ -300,8 +308,8 @@ int main(int argc, char * argv[]) try
     desc.add_options()
         ("help,h", "Print help messages")
         ("duration,d", po::value<int>()->default_value(8000), "Duration of the recording in milliseconds (ms)")
-        ("fps,s", po::value<int>()->default_value(30), "Acquisition speed (fps) of realsense (integer number 1~30)")
-        ("output_dir,o", po::value<std::string>()->default_value("."), "Output directory to save acquired data");
+        ("fps,f", po::value<int>()->default_value(30), "Acquisition speed (fps) of realsense (integer number 1~30)")
+        ("output-dir,o", po::value<std::string>()->default_value(""), "Output directory to save acquired data");
     
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm); // can throw
@@ -333,13 +341,18 @@ int main(int argc, char * argv[]) try
         rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
 
     // Create destiny directories to save acquired data
-    if (verbosity > 1) std::cout << "[Main] Creating output directory structure ...\n";
     std::string date_and_time = current_time_and_date();
-    fs::path parent = fs::path(vm["output_dir"].as<std::string>()) / fs::path(date_and_time);
-    boost::filesystem::create_directories(parent / fs::path("rs/color/"));
-    boost::filesystem::create_directories(parent / fs::path("rs/depth/"));
-    boost::filesystem::create_directories(parent / fs::path("pt/thermal/"));
-    if (verbosity > 1) std::cout << "[Main] Output directory structure \"" << parent.string() << "\"created\n";
+
+    fs::path parent = fs::path(vm["output-dir"].as<std::string>());
+    if (!parent.empty())
+    {
+        if (verbosity > 1) std::cout << "[Main] Creating output directory structure ...\n";
+        parent = parent / fs::path(date_and_time);
+        boost::filesystem::create_directories(parent / fs::path("rs/color/"));
+        boost::filesystem::create_directories(parent / fs::path("rs/depth/"));
+        boost::filesystem::create_directories(parent / fs::path("pt/thermal/"));
+        if (verbosity > 1) std::cout << "[Main] Output directory structure \"" << parent.string() << "\"created\n";
+    }
         
     // Initialize adquisition cues for consumer-producer setup
     if (verbosity > 1) std::cout << "[Main] Initializing producer-consumer queues ...\n";
@@ -401,20 +414,19 @@ int main(int argc, char * argv[]) try
             std::pair<cv::Mat,timestamp_t> pt_peek = queue_pt.peek();
 
             cv::Mat img_c = rs_peek.first.first;
-            cv::Mat img_d = rs_peek.first.second;
-            cv::Mat img_t = thermal_to_8bit(pt_peek.first);
-
-            cv::cvtColor(img_c, img_c, cv::COLOR_BGR2GRAY);
             cv::resize(img_c, img_c, cv::Size(426,240));
-            img_d.convertTo(img_d, CV_8UC1);
+
+            cv::Mat img_d = utils::depth_to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
             cv::resize(img_d, img_d, cv::Size(426,240));
-            cv::Mat img_t_pad;
+
+            cv::Mat img_t = utils::thermal_to_8bit(pt_peek.first);
             cv::resize(img_t, img_t, cv::Size(320,240));
-            cv::copyMakeBorder(img_t, img_t_pad, 0, 0, (426-320)/2, (426-320)/2, cv::BORDER_CONSTANT);
+            cv::copyMakeBorder(img_t, img_t, 0, 0, (426-320)/2, (426-320)/2, cv::BORDER_CONSTANT);
+            cv::cvtColor(img_t, img_t, cv::COLOR_GRAY2BGR);
 
             cv::Mat img_v_cd, img_v_cdt;
             cv::vconcat(img_c, img_d, img_v_cd);
-            cv::vconcat(img_v_cd, img_t_pad, img_v_cdt);
+            cv::vconcat(img_v_cd, img_t, img_v_cdt);
             cv::imshow("Viewer", img_v_cdt);
             cv::waitKey(1);
         } catch (std::runtime_error e) {

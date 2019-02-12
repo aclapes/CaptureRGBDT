@@ -46,7 +46,7 @@ find_library(LIBUVC_FOUND uvc HINTS ${LIBRARY_DIR} REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system filesystem program_options)
 find_package(OpenCV REQUIRED)
 
-add_executable(capture-rgbt capture-rgbt.cpp pt_pipeline.hpp safe_queue.hpp pt_pipeline.hpp safe_queue.hpp)
+add_executable(capture-rgbt capture-rgbt.cpp pt_pipeline.hpp safe_queue.hpp pt_pipeline.hpp safe_queue.hpp utils.hpp)
 include_directories(capture-rgbt ${ADDITIONAL_INCLUDE_DIRS})
 #link_directories(capture-rgbt ${ADDITIONAL_LIBRARY_DIRS} ${Boost_LIBRARY_DIRS})
 target_link_libraries(capture-rgbt PRIVATE ${LIBUVC_FOUND} ${REALSENSE2_FOUND} ${Boost_LIBRARIES} ${OpenCV_LIBS})
