@@ -2,11 +2,9 @@
 // Copyright(c) 2017 Intel Corporation. All Rights Reserved.
 
 #include <iostream>
-#include <librealsense2/rs.hpp>     // Include RealSense Cross Platform API
 #include <chrono>
 #include <thread>
 #include <opencv2/opencv.hpp>
-#include <queue>
 #include <boost/filesystem.hpp>
 #include <ctime>   // localtime
 #include <sstream> // stringstream

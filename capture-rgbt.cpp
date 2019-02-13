@@ -400,19 +400,18 @@ int main(int argc, char * argv[]) try
     // Launch producer and consumer threads
 
     if (verbosity > 1) std::cout << "[Main] Starting producer threads ...\n";
-
     std::thread p_rs_thr(produce_realsense, std::ref(pipe_rs), std::ref(profile), std::ref(queue_rs), std::ref(is_capturing), verbosity > 2);
     std::thread p_pt_thr(produce_purethermal, std::ref(pipe_pt), std::ref(queue_pt), std::ref(is_capturing), verbosity > 2);
+    if (verbosity > 1) std::cout << "[Main] Producer threads started ...\n";
 
     if (verbosity > 1) std::cout << "[Main] Starting consumer threads ...\n";
-
     std::thread c_rs_thr(consume_realsense, std::ref(queue_rs), std::ref(is_capturing), parent, verbosity > 2);
     std::thread c_pt_thr(consume_purethermal, std::ref(queue_pt), std::ref(is_capturing), parent, verbosity > 2);
+    if (verbosity > 1) std::cout << "[Main] Consumer threads started ...\n";
 
     /* Visualization loop. imshow needs to be in the main thread! */
 
     if (verbosity > 1) std::cout << "[Main] Starting visualization ...\n";
-
     while (is_capturing)
     {
         try {
@@ -434,25 +433,25 @@ int main(int argc, char * argv[]) try
             if (verbosity > 2) std::cerr << e.what() << std::endl;
         }
     }
-
     if (verbosity > 1) std::cout << "[Main] Capturing ended ...\n";
 
-    /* Wait for consumer threads to finish */
-    timer_thr.join();
+    cv::destroyWindow("Viewer");
+    if (verbosity > 1) std::cout << "[Main] Visualization ended ...\n";
 
+    /* Wait for consumer threads to finish */
+    if (verbosity > 1) std::cout << "[Main] Joining all threads ...\n";
+    timer_thr.join();
     c_rs_thr.join();
     c_pt_thr.join();
     p_rs_thr.join();
     p_pt_thr.join();
-
-    if (verbosity > 1) std::cout << "[Main] Joining all threads ...\n";
-
-    pipe_rs.stop();
-    pipe_pt.stop();
+    if (verbosity > 1) std::cout << "[Main] All threads joined ...\n";
 
     if (verbosity > 1) std::cout << "[Main] Stopping pipelines ...\n";
+    pipe_rs.stop();
+    pipe_pt.stop();
+    if (verbosity > 1) std::cout << "[Main] Pipelines stopped ...\n";
 
-    cv::destroyWindow("Viewer");
     if (verbosity > 0) std::cout << "Sequence saved in " << date_and_time << '\n';
 
     return SUCCESS;

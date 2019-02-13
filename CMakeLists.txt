@@ -53,7 +53,7 @@ target_link_libraries(capture-rgbt PRIVATE ${LIBUVC_FOUND} ${REALSENSE2_FOUND} $
 
 add_executable(viewer-rgbt viewer-rgbt.cpp utils.hpp)
 include_directories(viewer-rgbt ${ADDITIONAL_INCLUDE_DIRS})
-target_link_libraries(viewer-rgbt PRIVATE ${LIBUVC_FOUND} ${REALSENSE2_FOUND} ${Boost_LIBRARIES} ${OpenCV_LIBS})
+target_link_libraries(viewer-rgbt PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
 
 # Post Build script to copy realsense2.dll
 if(WIN32)
