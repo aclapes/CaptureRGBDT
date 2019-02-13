@@ -48,9 +48,12 @@ find_package(OpenCV REQUIRED)
 
 add_executable(capture-rgbt capture-rgbt.cpp pt_pipeline.hpp safe_queue.hpp pt_pipeline.hpp safe_queue.hpp utils.hpp)
 include_directories(capture-rgbt ${ADDITIONAL_INCLUDE_DIRS})
-#link_directories(capture-rgbt ${ADDITIONAL_LIBRARY_DIRS} ${Boost_LIBRARY_DIRS})
 target_link_libraries(capture-rgbt PRIVATE ${LIBUVC_FOUND} ${REALSENSE2_FOUND} ${Boost_LIBRARIES} ${OpenCV_LIBS})
-set_target_properties (capture-rgbt PROPERTIES FOLDER Examples)
+# set_target_properties (capture-rgbt PROPERTIES FOLDER Examples)
+
+add_executable(viewer-rgbt viewer-rgbt.cpp utils.hpp)
+include_directories(viewer-rgbt ${ADDITIONAL_INCLUDE_DIRS})
+target_link_libraries(viewer-rgbt PRIVATE ${LIBUVC_FOUND} ${REALSENSE2_FOUND} ${Boost_LIBRARIES} ${OpenCV_LIBS})
 
 # Post Build script to copy realsense2.dll
 if(WIN32)
@@ -66,6 +69,7 @@ install(
     TARGETS
 
     capture-rgbt
+    viewer-rgbt
 
     RUNTIME DESTINATION
     ${CMAKE_INSTALL_PREFIX}/bin

@@ -211,7 +211,10 @@ void consume_realsense(SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_
     
     int fid = 0;
     boost::format fmt("%08d");
-    std::ofstream outfile((dir / "rs.log").string(), std::ios_base::app);
+    std::ofstream outfile;
+
+    if (!dir.empty())
+        outfile.open((dir / "rs.log").string(), std::ios_base::app);
 
     while (is_capturing || q.size() > 0)
     {
@@ -242,7 +245,10 @@ void consume_purethermal(SafeQueue<std::pair<cv::Mat,timestamp_t>> & q, bool & i
     
     int fid = 0;
     boost::format fmt("%08d");
-    std::ofstream outfile((dir / "pt.log").string(), std::ios_base::app);
+    std::ofstream outfile;
+    
+    if (!dir.empty())
+        outfile.open((dir / "pt.log").string(), std::ios_base::app);
     
     while (is_capturing || q.size() > 0)
     {
@@ -343,7 +349,7 @@ int main(int argc, char * argv[]) try
     // Create destiny directories to save acquired data
     std::string date_and_time = current_time_and_date();
 
-    fs::path parent = fs::path(vm["output-dir"].as<std::string>());
+    fs::path parent (vm["output-dir"].as<std::string>());
     if (!parent.empty())
     {
         if (verbosity > 1) std::cout << "[Main] Creating output directory structure ...\n";

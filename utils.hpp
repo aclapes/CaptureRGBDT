@@ -45,6 +45,35 @@ namespace utils
 
         return falseColorsMap;
     }
+
+    void tile(std::vector<cv::Mat> src, int tile_width, int tile_height, int grid_x, int grid_y, cv::Mat & dst) 
+    {
+        // patch size
+        int width  =  tile_width / grid_x;
+        int height = tile_height / grid_y;
+        float aspect_ratio = ((float) src[0].cols) / src[0].rows;
+
+        dst.create(tile_height, tile_width, CV_8UC3);
+
+        // iterate through grid
+        int k = 0;
+        for(int i = 0; i < grid_y; i++) 
+        {
+            for(int j = 0; j < grid_x; j++) 
+            {
+                cv::Mat m = src[k++];
+                if ( (((float) m.cols) / m.rows) < aspect_ratio)
+                {
+                    int new_cols = floor(m.rows * aspect_ratio);
+                    int fill_size = new_cols - m.cols;
+                    cv::copyMakeBorder(m, m, 0, 0, fill_size/2, fill_size/2, cv::BORDER_CONSTANT);
+                }
+
+                cv::resize(m, m, cv::Size(width, height));
+                m.copyTo(dst(cv::Rect(j*width, i*height, width, height)));            
+            }
+        }
+    }
 }
 
 #endif /* utils_h */
