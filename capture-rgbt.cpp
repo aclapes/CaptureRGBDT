@@ -419,21 +419,16 @@ int main(int argc, char * argv[]) try
             std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t> rs_peek = queue_rs.peek();
             std::pair<cv::Mat,timestamp_t> pt_peek = queue_pt.peek();
 
-            cv::Mat img_c = rs_peek.first.first;
-            cv::resize(img_c, img_c, cv::Size(426,240));
+            cv::Mat c = rs_peek.first.first;
+            cv::Mat d = utils::depth_to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
+            cv::Mat t = utils::thermal_to_8bit(pt_peek.first);
+            cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
 
-            cv::Mat img_d = utils::depth_to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
-            cv::resize(img_d, img_d, cv::Size(426,240));
+            cv::Mat tiling;
+            std::vector<cv::Mat> frames = {c, d, t};
+            utils::tile(frames, 426, 720, 1, 3, tiling);
 
-            cv::Mat img_t = utils::thermal_to_8bit(pt_peek.first);
-            cv::resize(img_t, img_t, cv::Size(320,240));
-            cv::copyMakeBorder(img_t, img_t, 0, 0, (426-320)/2, (426-320)/2, cv::BORDER_CONSTANT);
-            cv::cvtColor(img_t, img_t, cv::COLOR_GRAY2BGR);
-
-            cv::Mat img_v_cd, img_v_cdt;
-            cv::vconcat(img_c, img_d, img_v_cd);
-            cv::vconcat(img_v_cd, img_t, img_v_cdt);
-            cv::imshow("Viewer", img_v_cdt);
+            cv::imshow("Viewer", tiling);
             cv::waitKey(1);
         } catch (std::runtime_error e) {
             if (verbosity > 2) std::cerr << e.what() << std::endl;
