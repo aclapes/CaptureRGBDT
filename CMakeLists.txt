@@ -55,6 +55,10 @@ add_executable(viewer-rgbt viewer-rgbt.cpp utils.hpp)
 include_directories(viewer-rgbt ${ADDITIONAL_INCLUDE_DIRS})
 target_link_libraries(viewer-rgbt PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
 
+add_executable(calib-thermal-intrinsics calib-thermal-intrinsics.cpp utils.hpp)
+include_directories(calib-thermal-intrinsics ${ADDITIONAL_INCLUDE_DIRS})
+target_link_libraries(calib-thermal-intrinsics PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
+
 # Post Build script to copy realsense2.dll
 if(WIN32)
 message(STATUS "Adding Post build script to copy realsense2.dll to project's binary folder")

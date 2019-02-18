@@ -9,8 +9,12 @@
 #define utils_h
 
 #include <opencv2/opencv.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/foreach.hpp>
 
-namespace utils
+namespace fs = boost::filesystem;
+
+namespace uls
 {
     cv::Mat thermal_to_8bit(cv::Mat data)
     {
@@ -73,6 +77,22 @@ namespace utils
                 m.copyTo(dst(cv::Rect(j*width, i*height, width, height)));            
             }
         }
+    }
+
+    std::vector<fs::path> list_files_in_directory(fs::path input_dir, std::string file_ext)
+    {
+        std::vector<fs::path> files;
+
+        fs::directory_iterator it(input_dir), eod;  
+        BOOST_FOREACH(const fs::path &p, std::make_pair(it, eod))   
+        { 
+            if(fs::is_regular_file(p) && fs::extension(p) == file_ext)
+            {
+                files.push_back(p);
+            } 
+        }
+
+        return files;
     }
 }
 

@@ -206,14 +206,14 @@ int main(int argc, char * argv[]) try
         cv::Mat t = cv::imread(fs::path(therm_path / fs::path("t_" + pt_ts.id + ".png")).string(), CV_LOAD_IMAGE_UNCHANGED);
 
         // preprocess frames
-        d = utils::depth_to_8bit(d, cv::COLORMAP_JET);
-        t = utils::thermal_to_8bit(t);
+        d = uls::depth_to_8bit(d, cv::COLORMAP_JET);
+        t = uls::thermal_to_8bit(t);
         cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
 
         // tile frame images in a mosaic
         std::vector<cv::Mat> frames = {c, d, t};
         cv::Mat tiling;
-        utils::tile(frames, 600, 900, 1, 3, tiling);       
+        uls::tile(frames, 600, 900, 1, 3, tiling);       
 
         // visualize mosaic
         cv::imshow("Viewer", tiling);

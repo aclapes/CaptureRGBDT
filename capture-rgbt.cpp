@@ -395,7 +395,10 @@ int main(int argc, char * argv[]) try
     std::thread timer_thr(timer, duration, std::ref(is_capturing)); // Timer modifies the is_capturing flag after X millisecons
     if (verbosity > 1) std::cout << "[Main] Timer initialized\n";
 
-    while (!is_capturing) continue; // safety check
+    while (!is_capturing) {
+        std::cout << "[Main] Waiting timer to fire ...\n";
+        continue; // safety check
+    }
 
     // Launch producer and consumer threads
 
@@ -419,13 +422,13 @@ int main(int argc, char * argv[]) try
             std::pair<cv::Mat,timestamp_t> pt_peek = queue_pt.peek();
 
             cv::Mat c = rs_peek.first.first;
-            cv::Mat d = utils::depth_to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
-            cv::Mat t = utils::thermal_to_8bit(pt_peek.first);
+            cv::Mat d = uls::depth_to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
+            cv::Mat t = uls::thermal_to_8bit(pt_peek.first);
             cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
 
             cv::Mat tiling;
             std::vector<cv::Mat> frames = {c, d, t};
-            utils::tile(frames, 426, 720, 1, 3, tiling);
+            uls::tile(frames, 426, 720, 1, 3, tiling);
 
             cv::imshow("Viewer", tiling);
             cv::waitKey(1);
