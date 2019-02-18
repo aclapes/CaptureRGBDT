@@ -33,15 +33,17 @@ cv::Mat get_reference_corners(cv::Size pattern_size)
 {
     cv::Mat corners_ref (pattern_size.height*pattern_size.width, 2, CV_32FC1);
 
-    float w_step = 1.f / (pattern_size.height-1);
-    float h_step = 1.f / (pattern_size.width-1);
+    float w_step = 1.f / (pattern_size.width-1);
+    float h_step = 1.f / (pattern_size.height-1);
 
-    for (int j = 0; j < pattern_size.height; j++)
+    for (int i = 0; i < pattern_size.height; i++)
     {
-        for (int i = 0; i < pattern_size.width; i++)
+        for (int j = 0; j < pattern_size.width; j++)
         {
-            corners_ref.at<float>(j*pattern_size.width+i, 0) = j*w_step;
-            corners_ref.at<float>(j*pattern_size.width+i, 1) = 1.f - i*h_step;
+            // corners_ref.at<float>(j*pattern_size.width+i, 0) = j*w_step;
+            // corners_ref.at<float>(j*pattern_size.width+i, 1) = 1.f - i*h_step;
+            corners_ref.at<float>(i*pattern_size.width+j, 0) = j*w_step;
+            corners_ref.at<float>(i*pattern_size.width+j, 1) = i*h_step;
         }
     }
 
@@ -50,27 +52,36 @@ cv::Mat get_reference_corners(cv::Size pattern_size)
 
 bool check_transformed_corners(cv::Mat corners, cv::Size pattern_size, cv::Size2f eps = cv::Size2f(0.f,0.f))
 {    
-    float w_step = 1.f / (pattern_size.height-1);
-    float h_step = 1.f / (pattern_size.width-1);
+    float w_step = 1.f / (pattern_size.width-1);
+    float h_step = 1.f / (pattern_size.height-1);
 
     if (eps.height == 0.f)
-        eps.height = w_step / 4.f;
+        eps.height = h_step / 4.f;
     if (eps.width == 0.f)
-        eps.width = h_step / 4.f;
+        eps.width = w_step / 4.f;
 
-    for (int j = 0; j < pattern_size.height; j++)
+    for (int i = 0; i < pattern_size.height; i++)
     {
-        for (int i = 0; i < pattern_size.width; i++)
+        for (int j = 0; j < pattern_size.width; j++)
         {
-            float diff_j = abs(corners.at<float>(j*pattern_size.width+i, 0) - j*w_step);
-            float diff_i = abs(corners.at<float>(j*pattern_size.width+i, 1) - (1.f - i*h_step));
-            if (diff_j > eps.height || diff_i > eps.width)
+            float diff_x = abs( corners.at<float>(i*pattern_size.width+j, 0) - j*w_step );
+            float diff_y = abs( corners.at<float>(i*pattern_size.width+j, 1) - i*h_step );
+            if ( !(diff_x < eps.width && diff_y < eps.height) )
                 return false;
         }
     }
 
     return true;
 }
+
+// static void calcBoardCornerPositions(Size boardSize, float squareSize, vector<Point3f>& corners)
+// {
+//     corners.clear();
+    
+//     for( int i = 0; i < boardSize.height; ++i )
+//         for( int j = 0; j < boardSize.width; ++j )
+//             corners.push_back(Point3f(float( j*squareSize ), float( i*squareSize ), 0));
+// }
 
 int main(int argc, char * argv[]) try
 {
@@ -111,7 +122,7 @@ int main(int argc, char * argv[]) try
     std::vector<fs::path> frames = uls::list_files_in_directory(input_dir, vm["file-ext"].as<std::string>());
     std::sort(frames.begin(), frames.end());  // sort files by filename
 
-    cv::Size pattern_size (9,8); // (width, height)
+    cv::Size pattern_size (8,9); // (width, height)
 
     float tracking_enabled = false;
     int nb_tracked_frames;
@@ -147,6 +158,7 @@ int main(int argc, char * argv[]) try
 
         cv::Mat cimg;
         cv::cvtColor(img, cimg, cv::COLOR_GRAY2BGR);
+        // cv::drawChessboardCorners(cimg, cv::Size(9,8), corners, patternfound_9x8);
 
         if (tracking_enabled)
         {
@@ -161,7 +173,7 @@ int main(int argc, char * argv[]) try
             cv::perspectiveTransform(corners, corners_transf, h);
 
             if ( check_transformed_corners(corners_transf, pattern_size) )
-                cv::drawChessboardCorners(cimg, cv::Size(9,8), corners, patternfound_9x8);
+                cv::drawChessboardCorners(cimg, pattern_size, corners, patternfound_9x8);
             else
                 tracking_enabled = false;
         }
