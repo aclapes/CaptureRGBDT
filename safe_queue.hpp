@@ -4,6 +4,7 @@
 //  https://stackoverflow.com/questions/15278343/c11-thread-safe-queue
 //
 //  Created by ChewOnThis_Trident on 13/04/2018.
+//  peek method added by aclapes.
 //
 
 #ifndef SAFE_QUEUE
@@ -37,7 +38,7 @@ public:
         c_dequeue.notify_one();
     }
 
-    T peek(int timeout_ms = 100)
+    T peek(int timeout_ms = 500)
     {
         std::unique_lock<std::mutex> lock(m);
         if ( c_peek.wait_for(lock, std::chrono::milliseconds(timeout_ms), [this](){return !q.empty();}) ) 

@@ -13,6 +13,7 @@
 #include <boost/format.hpp>
 #include <boost/foreach.hpp>
 #include <boost/program_options.hpp>
+#include <boost/progress.hpp>
 
 #include "utils.hpp"
 
@@ -26,62 +27,9 @@ namespace
   const size_t ERROR_IN_COMMAND_LINE = 1; 
   const size_t SUCCESS = 0; 
   const size_t ERROR_UNHANDLED_EXCEPTION = 2; 
+  const size_t FORCED_EXIT = 3;
  
 } // namespace
-
-cv::Mat get_reference_corners(cv::Size pattern_size)
-{
-    cv::Mat corners_ref (pattern_size.height*pattern_size.width, 2, CV_32FC1);
-
-    float w_step = 1.f / (pattern_size.width-1);
-    float h_step = 1.f / (pattern_size.height-1);
-
-    for (int i = 0; i < pattern_size.height; i++)
-    {
-        for (int j = 0; j < pattern_size.width; j++)
-        {
-            // corners_ref.at<float>(j*pattern_size.width+i, 0) = j*w_step;
-            // corners_ref.at<float>(j*pattern_size.width+i, 1) = 1.f - i*h_step;
-            corners_ref.at<float>(i*pattern_size.width+j, 0) = j*w_step;
-            corners_ref.at<float>(i*pattern_size.width+j, 1) = i*h_step;
-        }
-    }
-
-    return corners_ref;
-}
-
-bool check_transformed_corners(cv::Mat corners, cv::Size pattern_size, cv::Size2f eps = cv::Size2f(0.f,0.f))
-{    
-    float w_step = 1.f / (pattern_size.width-1);
-    float h_step = 1.f / (pattern_size.height-1);
-
-    if (eps.height == 0.f)
-        eps.height = h_step / 4.f;
-    if (eps.width == 0.f)
-        eps.width = w_step / 4.f;
-
-    for (int i = 0; i < pattern_size.height; i++)
-    {
-        for (int j = 0; j < pattern_size.width; j++)
-        {
-            float diff_x = abs( corners.at<float>(i*pattern_size.width+j, 0) - j*w_step );
-            float diff_y = abs( corners.at<float>(i*pattern_size.width+j, 1) - i*h_step );
-            if ( !(diff_x < eps.width && diff_y < eps.height) )
-                return false;
-        }
-    }
-
-    return true;
-}
-
-// static void calcBoardCornerPositions(Size boardSize, float squareSize, vector<Point3f>& corners)
-// {
-//     corners.clear();
-    
-//     for( int i = 0; i < boardSize.height; ++i )
-//         for( int j = 0; j < boardSize.width; ++j )
-//             corners.push_back(Point3f(float( j*squareSize ), float( i*squareSize ), 0));
-// }
 
 int main(int argc, char * argv[]) try
 {
@@ -90,11 +38,17 @@ int main(int argc, char * argv[]) try
     /* -------------------------------- */
     
     std::string input_dir_str;
+    bool verbose = false;
 
     po::options_description desc("Program options");
     desc.add_options()
         ("help,h", "Print help messages")
+        ("corners,c", po::value<std::string>()->default_value("./corners.yml"), "")
+        ("corner-selection,s", po::value<std::string>()->default_value("./corner-selection.yml"), "")
+        ("intrinsics,i", po::value<std::string>()->default_value("./intrinsics.yml"), "")
+        ("modality,m", po::value<std::string>()->default_value("thermal"), "Visual modality")
         ("file-ext,x", po::value<std::string>()->default_value(".jpg"), "Image file extension")
+        ("verbose,v", po::bool_switch(&verbose), "Verbosity")
         ("input-dir", po::value<std::string>(&input_dir_str)->required(), "Input directory containing pt frames and timestamp files");
     
     po::positional_options_description positional_options; 
@@ -116,73 +70,153 @@ int main(int argc, char * argv[]) try
     /* --------------- */
     /*    Main code    */
     /* --------------- */
-        
-    fs::path input_dir (vm["input-dir"].as<std::string>());
 
+    cv::Size pattern_size (8,9); // (width, height)
+    cv::FileStorage fs;
+    bool need_to_recompute = false;
+
+    fs::path input_dir (vm["input-dir"].as<std::string>());
     std::vector<fs::path> frames = uls::list_files_in_directory(input_dir, vm["file-ext"].as<std::string>());
     std::sort(frames.begin(), frames.end());  // sort files by filename
 
-    cv::Size pattern_size (8,9); // (width, height)
 
-    float tracking_enabled = false;
-    int nb_tracked_frames;
-    cv::Mat corners, corners_prev;
-    cv::Mat img, img_prev;
-    for (int i = 0; i < frames.size(); i++) 
+    /* Corners */
+
+    cv::Mat corners_all; // (frames_corners.size(), pattern_size.height * pattern_size.width * 2, CV_32F);
+    cv::Mat fids_all; // (frames_inds.size(), 1, CV_32S);
+
+    fs.open(vm["corners"].as<std::string>(), cv::FileStorage::READ);
+    if (fs.isOpened())
     {
-        std::string img_file_path = frames[i].string();
-        img = cv::imread(img_file_path, CV_LOAD_IMAGE_UNCHANGED);
-        img = uls::thermal_to_8bit(img);
-        // cv::cvtColor(img, img, cv::COLOR_BGR2GRAY);
-        std::cout << img_file_path << '\n';
-        cv::resize(img,img,cv::Size(640,480));
-        // cv::imshow("Viewer", img);
-        // cv::waitKey(0);S
-
-        bool patternfound_9x8 = findChessboardCorners(img, pattern_size, corners, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE);
-        if (patternfound_9x8) {
-            tracking_enabled = true;
-            // nb_tracked_frames = 0;
-        }
-        else if (tracking_enabled)
+        fs["corners_mat"] >> corners_all;
+        fs["indices_mat"] >> fids_all;
+    }
+    else
+    {
+        std::vector<cv::Mat> corners_;
+        std::vector<int> fids_;
+        std::string modality = vm["modality"].as<std::string>();
+        if (modality == "color")
+            uls::find_chessboard_corners<uls::ColorFrame>(frames, pattern_size, corners_, fids_, verbose);
+        else if (modality == "depth")
+            uls::find_chessboard_corners<uls::DepthFrame>(frames, pattern_size, corners_, fids_, verbose);
+        if (modality == "thermal")
+            uls::find_chessboard_corners<uls::ThermalFrame>(frames, pattern_size, corners_, fids_, verbose);
+        corners_all.create(corners_.size(), pattern_size.height * pattern_size.width * 2, CV_32F);
+        fids_all.create(fids_.size(), 1, CV_32S);
+        for (int i = 0; i < corners_.size(); i++)
         {
-            cv::Mat status, err;
-            cv::calcOpticalFlowPyrLK(img_prev, img, corners_prev, corners, status, err, cv::Size(7,7));
-
-            if (pattern_size.width * pattern_size.height != cv::sum(status)[0])
-                tracking_enabled = false;
+            corners_[i].reshape(1,1).copyTo(corners_all.row(i));
+            fids_all.at<int>(i,0) = fids_[i];
         }
 
-        // if (nb_tracked_frames > 15) 
-        //     tracking_enabled = false;
+        fs.open(vm["corners"].as<std::string>(), cv::FileStorage::WRITE);
+        fs << "corners_mat" << corners_all;
+        fs << "indices_mat" << fids_all;
 
-        cv::Mat cimg;
-        cv::cvtColor(img, cimg, cv::COLOR_GRAY2BGR);
-        // cv::drawChessboardCorners(cimg, cv::Size(9,8), corners, patternfound_9x8);
+        need_to_recompute = true;
+    }
+    fs.release();
 
-        if (tracking_enabled)
+
+    /* Corner selection */
+
+    cv::Mat corners, fids;
+    fs.open(vm["corner-selection"].as<std::string>(), cv::FileStorage::READ);
+    if (fs.isOpened() && !need_to_recompute)
+    {
+        fs["corners"] >> corners;
+    }
+    else
+    {
+        cv::Mat labels, centers;
+        cv::kmeans(corners_all, 50, labels, cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER, 10, 1.0), 3, cv::KMEANS_PP_CENTERS, centers);
+
+        // std::vector<fs::path> frame_selection (50);
+        // std::vector<std::vector<cv::Point2f> > image_points;
+        cv::Mat corners (50, corners_all.cols, corners_all.type());
+        cv::Mat fids (50, 1, CV_32SC1);
+        fids.setTo(-1);
+
+        for (int i = 0; i < labels.rows; i++)
         {
-            cornerSubPix(img, corners, cv::Size(15, 15), cv::Size(5, 5), cv::TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
-
-            cv::Mat corners_ref = get_reference_corners(pattern_size);
-
-            cv::Mat mask;
-            cv::Mat h = cv::findHomography(corners, corners_ref, mask, CV_RANSAC);
-
-            cv::Mat corners_transf;
-            cv::perspectiveTransform(corners, corners_transf, h);
-
-            if ( check_transformed_corners(corners_transf, pattern_size) )
-                cv::drawChessboardCorners(cimg, pattern_size, corners, patternfound_9x8);
-            else
-                tracking_enabled = false;
+            int lbl = labels.at<int>(i,0);
+            if (fids.at<int>(lbl,0) < 0) //(frame_selection[lbl].empty())
+            {
+                fs::path frame_path = frames[fids_all.at<int>(i,0)];
+                std::cout << frame_path << '\n';
+                cv::Mat img = uls::ThermalFrame(frame_path).mat();
+                cv::Mat corners_img = corners_all.row(i).reshape(2, pattern_size.width * pattern_size.height);
+                cv::drawChessboardCorners(img, pattern_size, corners_img, true);
+                cv::imshow("Viewer", img);
+                char ret = cv::waitKey();
+                if (ret == ' ')
+                    continue;
+                else if (ret == 13) 
+                {
+                    // frame_selection[lbl] = frame_path;
+                    // std::vector<cv::Point2f> corners_vec;
+                    // for (int j = 0; j < corners.rows; j++)
+                    //     corners_vec.push_back(cv::Point2f(corners.at<float>(j,0), corners.at<float>(j,1)));
+                    // image_points.push_back(corners_vec);
+                    corners_all.row(i).copyTo(corners.row(lbl));
+                    fids.at<int>(lbl,0) = i;
+                }
+                else if (ret == 27)
+                    return FORCED_EXIT;
+            }
         }
- 
-        cv::imshow("Viewer", cimg);
+
+        corners = uls::mask_rows(corners, fids >= 0);
+
+        fs.open(vm["corner-selection"].as<std::string>(), cv::FileStorage::WRITE);
+        fs << "corners" << corners;
+
+        need_to_recompute = true;
+    }
+    fs.release();
+
+
+    /* Intrinsics */
+
+    cv::Mat camera_matrix, dist_coeffs;
+
+    fs.open(vm["intrinsics"].as<std::string>(), cv::FileStorage::READ);
+    if (fs.isOpened() && !need_to_recompute)
+    {
+        fs["camera_matrix"] >> camera_matrix;
+        fs["dist_coeffs"] >> dist_coeffs;
+    }
+    else
+    {
+        camera_matrix = cv::Mat::eye(3, 3, CV_64F);
+        dist_coeffs = cv::Mat::zeros(8, 1, CV_64F);
+        std::vector<cv::Mat> rvecs, tvecs;
+
+        std::vector<std::vector<cv::Point2f> > image_points;
+        uls::mat_to_vecvec<cv::Point2f>(corners.reshape(2, corners.rows), image_points);
+        
+        std::vector<std::vector<cv::Point3f> > object_points (1);
+        uls::calcBoardCornerPositions(pattern_size, 0.07f, 0.05f, object_points[0]);
+        object_points.resize(image_points.size(), object_points[0]);
+
+        double rms = cv::calibrateCamera(object_points, image_points, cv::Size(640,480), camera_matrix, dist_coeffs, rvecs, tvecs);
+        
+        fs.open(vm["intrinsics"].as<std::string>(), cv::FileStorage::WRITE);
+        fs << "camera_matrix" << camera_matrix;
+        fs << "dist_coeffs" << dist_coeffs;
+
+        need_to_recompute = true;
+    }
+    fs.release();
+
+    for (fs::path p : frames)
+    {
+        cv::Mat img = uls::ThermalFrame(p).mat();
+        cv::Mat tmp = img.clone();
+        cv::undistort(tmp, img, camera_matrix, dist_coeffs);
+        cv::imshow("Viewer", img);
         cv::waitKey(33);
-
-        img_prev = img;
-        corners_prev = corners;
     }
 
     return SUCCESS;

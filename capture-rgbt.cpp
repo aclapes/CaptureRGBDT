@@ -14,6 +14,7 @@
 #include <string>  // string
 #include <boost/format.hpp>
 #include <boost/program_options.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include "pt_pipeline.hpp"
 #include "safe_queue.hpp"
@@ -150,6 +151,7 @@ void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, Sa
     rs2_stream align_to = find_stream_to_align(profile.get_streams());
     rs2::align align(align_to);
     float depth_scale = get_depth_scale(profile.get_device());
+    
     /*
     rs2::colorizer color_map;
     color_map.set_option(RS2_OPTION_HISTOGRAM_EQUALIZATION_ENABLED, 1.f);
@@ -186,6 +188,88 @@ void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, Sa
     }
 }
 
+void produce_realsense_depth(rs2::pipeline & pipe, rs2::pipeline_profile & profile, SafeQueue<std::pair<cv::Mat,timestamp_t>> & q, bool & is_capturing, bool verbose)
+{
+    while (is_capturing)
+    {
+        rs2::frameset frames = pipe.wait_for_frames(); // blocking instruction
+        timestamp_t ts = std::chrono::system_clock::now();
+        
+        // Trying to get both color and aligned depth frames
+        rs2::depth_frame depth_frame = frames.get_depth_frame();
+        
+        // Print the distance
+        cv::Mat d = cv::Mat(cv::Size(depth_frame.get_width(),depth_frame.get_height()), 
+                            CV_16U, 
+                            const_cast<void *>(depth_frame.get_data()), 
+                            cv::Mat::AUTO_STEP);
+
+        q.enqueue(std::pair<cv::Mat,timestamp_t>(d.clone(),ts));
+        if (verbose)
+            std::cerr << "[RS] <PRODUCER> enqueued " << q.size() << " ..." << '\n';
+    }
+}
+
+void produce_realsense_color(rs2::pipeline & pipe, rs2::pipeline_profile & profile, SafeQueue<std::pair<cv::Mat,timestamp_t>> & q, bool & is_capturing, bool verbose)
+{
+    while (is_capturing)
+    {
+        rs2::frameset frames = pipe.wait_for_frames(); // blocking instruction
+        timestamp_t ts = std::chrono::system_clock::now();
+        
+        // Trying to get both color and aligned depth frames
+        rs2::video_frame color_frame = frames.get_color_frame();
+        
+        // Print the distance
+        cv::Mat c = cv::Mat(cv::Size(color_frame.get_width(),color_frame.get_height()), 
+                            CV_8UC3, 
+                            const_cast<void *>(color_frame.get_data()), 
+                            cv::Mat::AUTO_STEP);
+
+        q.enqueue(std::pair<cv::Mat,timestamp_t>(c.clone(),ts));
+        if (verbose)
+            std::cerr << "[RS] <PRODUCER> enqueued " << q.size() << " ..." << '\n';
+    }
+}
+
+
+// void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>> & q, bool & is_capturing, bool verbose)
+// {
+//     rs2_stream align_to = find_stream_to_align(profile.get_streams());
+//     rs2::align align(align_to);
+//     float depth_scale = get_depth_scale(profile.get_device());
+
+//     while (is_capturing)
+//     {
+//         rs2::frameset frames = pipe.wait_for_frames(); // blocking instruction
+//         timestamp_t ts = std::chrono::system_clock::now();
+        
+//         if (profile_changed(pipe.get_active_profile().get_streams(), profile.get_streams()))
+//         {
+//             // If the profile was changed, update the align object, and also get the new device's depth scale
+//             profile = pipe.get_active_profile();
+//             align_to = find_stream_to_align(profile.get_streams());
+//             align = rs2::align(align_to);
+//             depth_scale = get_depth_scale(profile.get_device());
+//         }
+
+//         // Get processed aligned frame
+//         rs2::frameset processed = align.process(frames);
+
+//         // Trying to get both color and aligned depth frames
+//         rs2::video_frame other_frame = processed.first_or_default(align_to);
+//         rs2::depth_frame aligned_depth_frame = processed.get_depth_frame();
+        
+//         // Print the distance
+//         cv::Mat c = cv::Mat(cv::Size(1280,720), CV_8UC3, const_cast<void *>(other_frame.get_data()), cv::Mat::AUTO_STEP);
+//         cv::Mat d = cv::Mat(cv::Size(1280,720), CV_16U, const_cast<void *>(aligned_depth_frame.get_data()), cv::Mat::AUTO_STEP);
+
+//         q.enqueue(std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>(std::pair<cv::Mat,cv::Mat>(c.clone(),d.clone()),ts));
+//         if (verbose)
+//             std::cerr << "[RS] <PRODUCER> enqueued " << q.size() << " ..." << '\n';
+//     }
+// }
+
 void produce_purethermal(pt::pipeline & p, SafeQueue<std::pair<cv::Mat,timestamp_t>> & q, bool & is_capturing, bool verbose)
 {
     while (is_capturing)
@@ -194,9 +278,8 @@ void produce_purethermal(pt::pipeline & p, SafeQueue<std::pair<cv::Mat,timestamp
         uvc_frame_t *frame = p.wait_for_frames();
         timestamp_t ts = std::chrono::system_clock::now();
         
-        cv::Mat img_t_ = cv::Mat(cv::Size(160, 120), CV_16UC1, frame->data);
-        cv::Mat img_t;
-        cv::flip(img_t_, img_t, -1);
+        cv::Mat img_t = cv::Mat(cv::Size(160, 120), CV_16UC1, frame->data);
+        // cv::flip(img_t, img_t, -1);
         q.enqueue(std::pair<cv::Mat,timestamp_t>(img_t,ts));
         if (verbose)
             std::cerr << "[PT] <PRODUCER> enqueued " << q.size() << " ..." << '\n';
@@ -232,6 +315,70 @@ void consume_realsense(SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_
             fs::path depth_dir = dir / "rs/depth/";
             cv::imwrite((color_dir / ("c_" + fmt.str() + ".jpg")).string(), capture.first.first);
             cv::imwrite((depth_dir / ("d_" + fmt.str() + ".png")).string(), capture.first.second, compression_params);
+        }
+        fid++;
+    }
+}
+
+void consume_realsense_color(SafeQueue<std::pair<cv::Mat,timestamp_t>> & q, bool & is_capturing, fs::path dir, bool verbose)
+{
+    std::vector<int> compression_params;
+    compression_params.push_back(cv::IMWRITE_PNG_COMPRESSION);
+    compression_params.push_back(0);
+    
+    int fid = 0;
+    boost::format fmt("%08d");
+    std::ofstream outfile;
+
+    if (!dir.empty())
+        outfile.open((dir / "rs.log").string(), std::ios_base::app);
+
+    while (is_capturing || q.size() > 0)
+    {
+        std::pair<cv::Mat,timestamp_t> capture = q.dequeue();
+        if (verbose)
+            std::cout << "[RS] >CONSUMER< dequeued " << q.size() << " ..." << '\n';
+
+        if (!dir.empty())
+        {
+            long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(capture.second.time_since_epoch()).count();
+            fmt % fid;
+            outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
+        
+            fs::path color_dir = dir / "rs/color/";
+            cv::imwrite((color_dir / ("c_" + fmt.str() + ".jpg")).string(), capture.first);
+        }
+        fid++;
+    }
+}
+
+void consume_realsense_depth(SafeQueue<std::pair<cv::Mat,timestamp_t>> & q, bool & is_capturing, fs::path dir, bool verbose)
+{
+    std::vector<int> compression_params;
+    compression_params.push_back(cv::IMWRITE_PNG_COMPRESSION);
+    compression_params.push_back(0);
+    
+    int fid = 0;
+    boost::format fmt("%08d");
+    std::ofstream outfile;
+
+    if (!dir.empty())
+        outfile.open((dir / "rs.log").string(), std::ios_base::app);
+
+    while (is_capturing || q.size() > 0)
+    {
+        std::pair<cv::Mat,timestamp_t> capture = q.dequeue();
+        if (verbose)
+            std::cout << "[RS] >CONSUMER< dequeued " << q.size() << " ..." << '\n';
+
+        if (!dir.empty())
+        {
+            long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(capture.second.time_since_epoch()).count();
+            fmt % fid;
+            outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
+        
+            fs::path color_dir = dir / "rs/depth/";
+            cv::imwrite((color_dir / ("d_" + fmt.str() + ".png")).string(), capture.first);
         }
         fid++;
     }
@@ -314,7 +461,11 @@ int main(int argc, char * argv[]) try
     desc.add_options()
         ("help,h", "Print help messages")
         ("duration,d", po::value<int>()->default_value(8000), "Duration of the recording in milliseconds (ms)")
+        ("modalities,M", po::value<std::string>()->default_value("color,depth,thermal"), "Comma-separated list of modalities to capture")
+        ("find-pattern-on,F", po::value<std::string>()->default_value("color,thermal"), "Comma-separated list of modalities to find pattern on (color and/or thermal)")
+        ("pattern,p", po::value<std::string>()->default_value("8,9"), "Pattern size \"x,y\" squares")
         ("fps,f", po::value<int>()->default_value(30), "Acquisition speed (fps) of realsense (integer number 1~30)")
+        ("verbosity,v", po::value<int>()->default_value(0), "Verbosity level (0: nothing | 1: countdown & output | 2: sections | 3: threads | 4: rs internals)")
         ("output-dir,o", po::value<std::string>()->default_value(""), "Output directory to save acquired data");
     
     po::variables_map vm;
@@ -341,10 +492,27 @@ int main(int argc, char * argv[]) try
         3: consumer/producer-level verbosity
         4: device-level verbosity
     */
-    int verbosity = 2;
+    int verbosity = vm["verbosity"].as<int>();
 
     if (verbosity > 4) 
         rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
+
+    std::vector<std::string> modalities;
+    boost::split(modalities, vm["modalities"].as<std::string>(), boost::is_any_of(","));
+
+    std::vector<std::string> find_pattern_on;
+    boost::split(find_pattern_on, vm["find-pattern-on"].as<std::string>(), boost::is_any_of(","));
+
+    std::vector<std::string> pattern_dims;
+    boost::split(pattern_dims, vm["pattern"].as<std::string>(), boost::is_any_of(","));
+    cv::Size pattern_size (std::stoi(pattern_dims[0]), std::stoi(pattern_dims[1]));
+
+    bool use_color = std::find(modalities.begin(), modalities.end(), "color") != modalities.end();
+    bool use_depth = std::find(modalities.begin(), modalities.end(), "depth") != modalities.end();
+    bool use_thermal = std::find(modalities.begin(), modalities.end(), "thermal") != modalities.end();
+
+    bool find_pattern_on_color = std::find(find_pattern_on.begin(), find_pattern_on.end(), "color") != find_pattern_on.end();
+    bool find_pattern_on_thermal = std::find(find_pattern_on.begin(), find_pattern_on.end(), "thermal") != find_pattern_on.end();
 
     // Create destiny directories to save acquired data
     std::string date_and_time = current_time_and_date();
@@ -352,36 +520,50 @@ int main(int argc, char * argv[]) try
     fs::path parent (vm["output-dir"].as<std::string>());
     if (!parent.empty())
     {
-        if (verbosity > 1) std::cout << "[Main] Creating output directory structure ...\n";
+        if (verbosity > 1) 
+            std::cout << "[Main] Creating output directory structure ...\n";
+
         parent = parent / fs::path(date_and_time);
-        boost::filesystem::create_directories(parent / fs::path("rs/color/"));
-        boost::filesystem::create_directories(parent / fs::path("rs/depth/"));
-        boost::filesystem::create_directories(parent / fs::path("pt/thermal/"));
-        if (verbosity > 1) std::cout << "[Main] Output directory structure \"" << parent.string() << "\"created\n";
+        if (use_color) 
+            boost::filesystem::create_directories(parent / fs::path("rs/color/"));
+        if (use_depth) 
+            boost::filesystem::create_directories(parent / fs::path("rs/depth/"));
+        if (use_thermal) 
+            boost::filesystem::create_directories(parent / fs::path("pt/thermal/"));
+
+        if (verbosity > 1) 
+            std::cout << "[Main] Output directory structure \"" << parent.string() << "\"created\n";
     }
         
     // Initialize adquisition cues for consumer-producer setup
-    if (verbosity > 1) std::cout << "[Main] Initializing producer-consumer queues ...\n";
+    if (verbosity > 1) 
+        std::cout << "[Main] Initializing producer-consumer queues ...\n";
+
     SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>> queue_rs;
+    SafeQueue<std::pair<cv::Mat,timestamp_t>> queue_rs_c, queue_rs_d; // when only one RS modality is used
     SafeQueue<std::pair<cv::Mat,timestamp_t>> queue_pt;
-    if (verbosity > 1) std::cout << "[Main] Producer-consumer queues initialized\n";
+
+    if (verbosity > 1) 
+        std::cout << "[Main] Producer-consumer queues initialized\n";
 
     // Initialize devices
-    if (verbosity > 1) std::cout << "[Main] Initializing devices ...\n";
+    if (verbosity > 1) 
+        std::cout << "[Main] Initializing devices ...\n";
+
     rs2::pipeline pipe_rs;
     pt::pipeline pipe_pt;
     
     rs2::config cfg;
-    cfg.enable_stream(RS2_STREAM_COLOR, 1280, 720, RS2_FORMAT_BGR8, vm["fps"].as<int>());
-    cfg.enable_stream(RS2_STREAM_DEPTH, 1280, 720, RS2_FORMAT_Z16, vm["fps"].as<int>());
+    if (use_color) cfg.enable_stream(RS2_STREAM_COLOR, 1280, 720, RS2_FORMAT_BGR8, vm["fps"].as<int>());
+    if (use_depth) cfg.enable_stream(RS2_STREAM_DEPTH, 1280, 720, RS2_FORMAT_Z16, vm["fps"].as<int>());
     // cfg.enable_stream(RS2_STREAM_INFRARED, 1280, 720, RS2_FORMAT_Y8, 15);
     
-    rs2::pipeline_profile profile = pipe_rs.start(cfg);
-    pipe_pt.start(); // no need for external configuration
+    rs2::pipeline_profile profile;
+    if (use_color || use_depth) 
+        profile = pipe_rs.start(cfg);
+    if (use_thermal)
+        pipe_pt.start(); // no need for external configuration
     if (verbosity > 1) std::cout << "[Main] Devices initialized ...\n";
-    
-    // Open visualization window
-    cv::namedWindow("Viewer");
 
     // Countdown
     int total_count = 3;
@@ -389,11 +571,15 @@ int main(int argc, char * argv[]) try
     countdown(total_count, warn_every, verbosity > 0); // sleep for total_count (seconds) and warn every warn_every (seconds)
 
     // Create a timer thread that will count the number of seconds to record (uses "is_capturing" boolean variable)
-    if (verbosity > 1) std::cout << "[Main] Initializing timer ...\n";
+    if (verbosity > 1) 
+        std::cout << "[Main] Initializing timer ...\n";
+
     int duration = vm["duration"].as<int>(); // acquisition time in ms
     bool is_capturing;
     std::thread timer_thr(timer, duration, std::ref(is_capturing)); // Timer modifies the is_capturing flag after X millisecons
-    if (verbosity > 1) std::cout << "[Main] Timer initialized\n";
+
+    if (verbosity > 1) 
+        std::cout << "[Main] Timer initialized\n";
 
     while (!is_capturing) {
         std::cout << "[Main] Waiting timer to fire ...\n";
@@ -402,60 +588,143 @@ int main(int argc, char * argv[]) try
 
     // Launch producer and consumer threads
 
-    if (verbosity > 1) std::cout << "[Main] Starting producer threads ...\n";
-    std::thread p_rs_thr(produce_realsense, std::ref(pipe_rs), std::ref(profile), std::ref(queue_rs), std::ref(is_capturing), verbosity > 2);
-    std::thread p_pt_thr(produce_purethermal, std::ref(pipe_pt), std::ref(queue_pt), std::ref(is_capturing), verbosity > 2);
-    if (verbosity > 1) std::cout << "[Main] Producer threads started ...\n";
+    std::thread p_rs_thr, p_pt_thr;
+    std::thread c_rs_thr, c_pt_thr;
 
-    if (verbosity > 1) std::cout << "[Main] Starting consumer threads ...\n";
-    std::thread c_rs_thr(consume_realsense, std::ref(queue_rs), std::ref(is_capturing), parent, verbosity > 2);
-    std::thread c_pt_thr(consume_purethermal, std::ref(queue_pt), std::ref(is_capturing), parent, verbosity > 2);
-    if (verbosity > 1) std::cout << "[Main] Consumer threads started ...\n";
+    if (verbosity > 1) 
+        std::cout << "[Main] Starting RS consumer/producer threads ...\n";
+    if (use_color && use_depth) 
+        p_rs_thr = std::thread(produce_realsense, std::ref(pipe_rs), std::ref(profile), std::ref(queue_rs), std::ref(is_capturing), verbosity > 2);
+    else if (use_color)
+        p_rs_thr = std::thread(produce_realsense_color, std::ref(pipe_rs), std::ref(profile), std::ref(queue_rs_c), std::ref(is_capturing), verbosity > 2);
+    else if (use_depth)
+        p_rs_thr = std::thread(produce_realsense_depth, std::ref(pipe_rs), std::ref(profile), std::ref(queue_rs_d), std::ref(is_capturing), verbosity > 2);
+
+    if (use_thermal) 
+        p_pt_thr = std::thread(produce_purethermal, std::ref(pipe_pt), std::ref(queue_pt), std::ref(is_capturing), verbosity > 2);
+    if (verbosity > 1) 
+        std::cout << "[Main] Producer threads started ...\n";
+
+    if (verbosity > 1) 
+        std::cout << "[Main] Starting consumer threads ...\n";
+    if (use_color && use_depth)
+        c_rs_thr = std::thread(consume_realsense, std::ref(queue_rs), std::ref(is_capturing), parent, verbosity > 2);
+    else if (use_color)
+        c_rs_thr = std::thread(consume_realsense_color, std::ref(queue_rs_c), std::ref(is_capturing), parent, verbosity > 2);
+    else if (use_depth)
+        c_rs_thr = std::thread(consume_realsense_depth, std::ref(queue_rs_d), std::ref(is_capturing), parent, verbosity > 2);
+    if (use_thermal) 
+        c_pt_thr = std::thread(consume_purethermal, std::ref(queue_pt), std::ref(is_capturing), parent, verbosity > 2);
+    if (verbosity > 1) 
+        std::cout << "[Main] Consumer threads started ...\n";
 
     /* Visualization loop. imshow needs to be in the main thread! */
 
-    if (verbosity > 1) std::cout << "[Main] Starting visualization ...\n";
+    if (verbosity > 1) 
+        std::cout << "[Main] Starting visualization ...\n";
+
+    // Open visualization window
+    cv::namedWindow("Viewer");
+
     while (is_capturing)
     {
-        try {
-            std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t> rs_peek = queue_rs.peek();
-            std::pair<cv::Mat,timestamp_t> pt_peek = queue_pt.peek();
+        try 
+        {
+            std::vector<cv::Mat> frames;
 
-            cv::Mat c = rs_peek.first.first;
-            cv::Mat d = uls::depth_to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
-            cv::Mat t = uls::thermal_to_8bit(pt_peek.first);
-            cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
+            if (use_color && use_depth)
+            {
+                std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t> rs_peek = queue_rs.peek();
+                cv::Mat c = rs_peek.first.first;
+                cv::Mat d = uls::DepthFrame::to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
+                frames.push_back(c);
+                frames.push_back(d);
+                
+            }
+            else if (use_color)
+            {
+                std::pair<cv::Mat,timestamp_t> rs_peek = queue_rs_c.peek();
+                cv::Mat c = rs_peek.first;
+                if (find_pattern_on_color)
+                {
+                    cv::Mat c_gray;
+                    cv::cvtColor(c, c_gray, cv::COLOR_BGR2GRAY);
+                    cv::Mat corners;
+                    bool found = cv::findChessboardCorners(c_gray, pattern_size, corners, 
+                                                        cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
+                    cv::drawChessboardCorners(c, pattern_size, corners, found);
+                }
+                frames.push_back(c);
+            }
+            else if (use_depth)
+            {
+                std::pair<cv::Mat,timestamp_t> rs_peek = queue_rs_d.peek();
+                cv::Mat d = uls::DepthFrame::to_8bit(rs_peek.first, cv::COLORMAP_JET);
+                frames.push_back(d);
+            }
+
+            if (use_thermal)
+            {
+                std::pair<cv::Mat,timestamp_t> pt_peek = queue_pt.peek();
+                cv::Mat t = uls::ThermalFrame::to_8bit(pt_peek.first);
+                if (find_pattern_on_color)
+                {
+                    cv::Mat corners;
+                    bool found = cv::findChessboardCorners(t, pattern_size, corners, 
+                                                           cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
+                    cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
+                    cv::drawChessboardCorners(t, pattern_size, corners, found);
+                }
+                else
+                {
+                    cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
+                }
+                frames.push_back(t);
+            }
 
             cv::Mat tiling;
-            std::vector<cv::Mat> frames = {c, d, t};
-            uls::tile(frames, 426, 720, 1, 3, tiling);
+            uls::tile(frames, 426, 240*frames.size(), 1, frames.size(), tiling);
 
             cv::imshow("Viewer", tiling);
             cv::waitKey(1);
-        } catch (std::runtime_error e) {
-            if (verbosity > 2) std::cerr << e.what() << std::endl;
+        } 
+        catch (std::runtime_error e) 
+        {
+            if (verbosity > 2) 
+                std::cerr << e.what() << std::endl;
         }
     }
-    if (verbosity > 1) std::cout << "[Main] Capturing ended ...\n";
+    if (verbosity > 1) 
+        std::cout << "[Main] Capturing ended ...\n";
 
     cv::destroyWindow("Viewer");
-    if (verbosity > 1) std::cout << "[Main] Visualization ended ...\n";
+    if (verbosity > 1) 
+        std::cout << "[Main] Visualization ended ...\n";
 
     /* Wait for consumer threads to finish */
-    if (verbosity > 1) std::cout << "[Main] Joining all threads ...\n";
+    if (verbosity > 1) 
+        std::cout << "[Main] Joining all threads ...\n";
+
     timer_thr.join();
-    c_rs_thr.join();
-    c_pt_thr.join();
-    p_rs_thr.join();
-    p_pt_thr.join();
-    if (verbosity > 1) std::cout << "[Main] All threads joined ...\n";
+    if (use_color || use_depth) c_rs_thr.join();
+    if (use_thermal) c_pt_thr.join();
+    if (use_color || use_depth) p_rs_thr.join();
+    if (use_thermal) p_pt_thr.join();
 
-    if (verbosity > 1) std::cout << "[Main] Stopping pipelines ...\n";
-    pipe_rs.stop();
-    pipe_pt.stop();
-    if (verbosity > 1) std::cout << "[Main] Pipelines stopped ...\n";
+    if (verbosity > 1) 
+        std::cout << "[Main] All threads joined ...\n";
 
-    if (verbosity > 0) std::cout << "Sequence saved in " << date_and_time << '\n';
+    if (verbosity > 1) 
+        std::cout << "[Main] Stopping pipelines ...\n";
+
+    if (use_color || use_depth) pipe_rs.stop();
+    if (use_thermal) pipe_pt.stop();
+
+    if (verbosity > 1) 
+        std::cout << "[Main] Pipelines stopped ...\n";
+
+    if (verbosity > 0) 
+        std::cout << "Sequence saved in " << date_and_time << '\n';
 
     return SUCCESS;
 }

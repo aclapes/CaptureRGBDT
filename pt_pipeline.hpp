@@ -27,9 +27,65 @@ namespace pt
     public:
         pipeline()
         {
-            uvc_error_t res;
+            // uvc_error_t res;
             
-            res = uvc_init(&(this->ctx), NULL);
+            // res = uvc_init(&(this->ctx), NULL);
+            // if (res < 0) {
+            //     uvc_perror(res, "uvc_init");
+            //     throw std::runtime_error("uvc_init failed");
+            // }
+            
+            // /* filter devices: vendor_id, product_id, "serial_num" */
+            // res = uvc_find_device(this->ctx, &(this->dev), PT1_VID, PT1_PID, NULL);
+            // if (res < 0) {
+            //     uvc_perror(res, "uvc_find_device"); /* no devices found */
+            //     throw std::runtime_error("uvc_find_device failed");
+            // }
+            
+            // /* Try to open the device: requires exclusive access */
+            // res = uvc_open(dev, &devh);
+            // if (res < 0) {
+            //     uvc_perror(res, "uvc_open"); /* unable to open device */
+            //     /* Release the device descriptor */
+            //     uvc_unref_device(dev);
+            //     throw std::runtime_error("uvc_open failed");
+            // }
+            
+            // /* Print out a message containing all the information that libuvc
+            //  * knows about the device */
+            // uvc_print_diag(devh, stderr);
+            
+            // /* Try to negotiate a 160x120 9 fps Y16 stream profile */
+            // res = uvc_get_stream_ctrl_format_size(
+            //                                       devh, &ctrl, /* result stored in ctrl */
+            //                                       UVC_FRAME_FORMAT_Y16, /* YUV 422, aka YUV 4:2:2. try _COMPRESSED */
+            //                                       160, 120, 9 /* width, height, fps */
+            //                                       );
+            // uvc_print_stream_ctrl(&ctrl, stderr);
+            // if (res < 0) {
+            //     uvc_perror(res, "get_mode");
+            //     throw std::runtime_error("get_stream_ctrl_format_size failed");
+            // }
+            
+            // res = uvc_stream_open_ctrl(devh, &strmh, &ctrl);
+            // if (res < 0) {
+            //     uvc_perror(res, "stream_open_ctrl");
+            //     throw std::runtime_error("stream_open_ctrl failed");
+            // }
+        }
+        
+        ~pipeline()
+        {
+            // uvc_close(devh);
+            // uvc_unref_device(dev);
+            // uvc_exit(ctx);
+        }
+        
+        void start()
+        {
+            uvc_error_t res;
+
+                        res = uvc_init(&(this->ctx), NULL);
             if (res < 0) {
                 uvc_perror(res, "uvc_init");
                 throw std::runtime_error("uvc_init failed");
@@ -72,18 +128,6 @@ namespace pt
                 uvc_perror(res, "stream_open_ctrl");
                 throw std::runtime_error("stream_open_ctrl failed");
             }
-        }
-        
-        ~pipeline()
-        {
-            uvc_close(devh);
-            uvc_unref_device(dev);
-            uvc_exit(ctx);
-        }
-        
-        void start()
-        {
-            uvc_error_t res;
             
             res = uvc_stream_start(this->strmh, NULL, (void*) NULL, 0, 0);
             if (res < 0)
@@ -105,6 +149,10 @@ namespace pt
             }
             
             uvc_stop_streaming(devh);
+
+            uvc_close(devh);
+            uvc_unref_device(dev);
+            uvc_exit(ctx);
         }
         
         uvc_frame_t* wait_for_frames(unsigned int timeout_ms = 0) const

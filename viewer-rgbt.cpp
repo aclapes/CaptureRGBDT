@@ -206,8 +206,8 @@ int main(int argc, char * argv[]) try
         cv::Mat t = cv::imread(fs::path(therm_path / fs::path("t_" + pt_ts.id + ".png")).string(), CV_LOAD_IMAGE_UNCHANGED);
 
         // preprocess frames
-        d = uls::depth_to_8bit(d, cv::COLORMAP_JET);
-        t = uls::thermal_to_8bit(t);
+        d = uls::DepthFrame::to_8bit(d, cv::COLORMAP_JET);
+        t = uls::ThermalFrame::to_8bit(t);
         cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
 
         // tile frame images in a mosaic
