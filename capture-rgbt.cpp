@@ -451,6 +451,17 @@ void countdown(int total, int warn_every, bool verbose = true)
     }
 }
 
+void find_and_draw_chessboard(cv::Mat & img, cv::Size pattern_size, int flags = 0)
+{
+    cv::Mat gray;
+    cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+
+    cv::Mat corners;
+    bool found = cv::findChessboardCorners(gray, pattern_size, corners, flags);
+
+    cv::drawChessboardCorners(img, pattern_size, corners, found);
+}
+
 int main(int argc, char * argv[]) try
 {
     /* -------------------------------- */
@@ -462,7 +473,7 @@ int main(int argc, char * argv[]) try
         ("help,h", "Print help messages")
         ("duration,d", po::value<int>()->default_value(8000), "Duration of the recording in milliseconds (ms)")
         ("modalities,M", po::value<std::string>()->default_value("color,depth,thermal"), "Comma-separated list of modalities to capture")
-        ("find-pattern-on,F", po::value<std::string>()->default_value("color,thermal"), "Comma-separated list of modalities to find pattern on (color and/or thermal)")
+        ("find-pattern-on,F", po::value<std::string>()->implicit_value(""), "Comma-separated list of modalities to find pattern on (color and/or thermal)")
         ("pattern,p", po::value<std::string>()->default_value("8,9"), "Pattern size \"x,y\" squares")
         ("fps,f", po::value<int>()->default_value(30), "Acquisition speed (fps) of realsense (integer number 1~30)")
         ("verbosity,v", po::value<int>()->default_value(0), "Verbosity level (0: nothing | 1: countdown & output | 2: sections | 3: threads | 4: rs internals)")
@@ -485,36 +496,67 @@ int main(int argc, char * argv[]) try
     /*    Main code    */
     /* --------------- */
         
-    /* Set verbosity level:
-        0: nothing
-        1: countdown and output directory at the end of the program
-        2: main program sections verbosity
-        3: consumer/producer-level verbosity
-        4: device-level verbosity
-    */
+    /* 
+     * Set verbosity level:
+     * 
+     *   0: nothing
+     *   1: countdown and output directory at the end of the program
+     *   2: main program sections verbosity
+     *   3: consumer/producer-level verbosity
+     *   4: device-level verbosity
+     */
+
     int verbosity = vm["verbosity"].as<int>();
 
-    if (verbosity > 4) 
-        rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
+    /* 
+     * Define input modalities
+     */
+
+    bool use_color   = false;
+    bool use_depth   = false;
+    bool use_thermal = false;
 
     std::vector<std::string> modalities;
     boost::split(modalities, vm["modalities"].as<std::string>(), boost::is_any_of(","));
+    use_color   = std::find(modalities.begin(), modalities.end(), "Color") != modalities.end();
+    use_depth   = std::find(modalities.begin(), modalities.end(), "Depth") != modalities.end();
+    use_thermal = std::find(modalities.begin(), modalities.end(), "Thermal") != modalities.end();
+    
+    assert(use_color || use_depth || use_thermal);
+
+    /*
+     * Define chessboard search in Color/Thermal modalities
+     */
+
+    bool find_pattern_color   = false;
+    bool find_pattern_thermal = false;
 
     std::vector<std::string> find_pattern_on;
-    boost::split(find_pattern_on, vm["find-pattern-on"].as<std::string>(), boost::is_any_of(","));
+    if (vm.find("find-pattern-on") != vm.end())
+    {
+        boost::split(find_pattern_on, vm["find-pattern-on"].as<std::string>(), boost::is_any_of(","));
+        find_pattern_color   = std::find(find_pattern_on.begin(), find_pattern_on.end(), "Color") != find_pattern_on.end();
+        find_pattern_thermal = std::find(find_pattern_on.begin(), find_pattern_on.end(), "Thermal") != find_pattern_on.end();
+    }
+
+    /*
+     * Define calibration pattern size
+     */
 
     std::vector<std::string> pattern_dims;
     boost::split(pattern_dims, vm["pattern"].as<std::string>(), boost::is_any_of(","));
-    cv::Size pattern_size (std::stoi(pattern_dims[0]), std::stoi(pattern_dims[1]));
+    assert(pattern_dims.size() == 2);
+    
+    int x = std::stoi(pattern_dims[0]);
+    int y = std::stoi(pattern_dims[1]);
+    assert(x > 2 && x > 2);
 
-    bool use_color = std::find(modalities.begin(), modalities.end(), "color") != modalities.end();
-    bool use_depth = std::find(modalities.begin(), modalities.end(), "depth") != modalities.end();
-    bool use_thermal = std::find(modalities.begin(), modalities.end(), "thermal") != modalities.end();
+    cv::Size pattern_size (x,y);
 
-    bool find_pattern_on_color = std::find(find_pattern_on.begin(), find_pattern_on.end(), "color") != find_pattern_on.end();
-    bool find_pattern_on_thermal = std::find(find_pattern_on.begin(), find_pattern_on.end(), "thermal") != find_pattern_on.end();
+    /*
+     * Create output directory structures to store captured data
+     */
 
-    // Create destiny directories to save acquired data
     std::string date_and_time = current_time_and_date();
 
     fs::path parent (vm["output-dir"].as<std::string>());
@@ -534,28 +576,23 @@ int main(int argc, char * argv[]) try
         if (verbosity > 1) 
             std::cout << "[Main] Output directory structure \"" << parent.string() << "\"created\n";
     }
-        
-    // Initialize adquisition cues for consumer-producer setup
-    if (verbosity > 1) 
-        std::cout << "[Main] Initializing producer-consumer queues ...\n";
 
-    SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>> queue_rs;
-    SafeQueue<std::pair<cv::Mat,timestamp_t>> queue_rs_c, queue_rs_d; // when only one RS modality is used
-    SafeQueue<std::pair<cv::Mat,timestamp_t>> queue_pt;
-
-    if (verbosity > 1) 
-        std::cout << "[Main] Producer-consumer queues initialized\n";
-
-    // Initialize devices
+    /*
+     * Initialize devices
+     */
     if (verbosity > 1) 
         std::cout << "[Main] Initializing devices ...\n";
 
     rs2::pipeline pipe_rs;
     pt::pipeline pipe_pt;
+    if (verbosity > 4) 
+        rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
     
     rs2::config cfg;
-    if (use_color) cfg.enable_stream(RS2_STREAM_COLOR, 1280, 720, RS2_FORMAT_BGR8, vm["fps"].as<int>());
-    if (use_depth) cfg.enable_stream(RS2_STREAM_DEPTH, 1280, 720, RS2_FORMAT_Z16, vm["fps"].as<int>());
+    if (use_color) 
+        cfg.enable_stream(RS2_STREAM_COLOR, 1280, 720, RS2_FORMAT_BGR8, vm["fps"].as<int>());
+    if (use_depth) 
+        cfg.enable_stream(RS2_STREAM_DEPTH, 1280, 720, RS2_FORMAT_Z16, vm["fps"].as<int>());
     // cfg.enable_stream(RS2_STREAM_INFRARED, 1280, 720, RS2_FORMAT_Y8, 15);
     
     rs2::pipeline_profile profile;
@@ -563,60 +600,69 @@ int main(int argc, char * argv[]) try
         profile = pipe_rs.start(cfg);
     if (use_thermal)
         pipe_pt.start(); // no need for external configuration
-    if (verbosity > 1) std::cout << "[Main] Devices initialized ...\n";
 
-    // Countdown
+    if (verbosity > 1) 
+        std::cout << "[Main] Devices initialized ...\n";
+
+    /*
+     * Countdown and timing
+     */
+
     int total_count = 3;
     int warn_every = 1;
     countdown(total_count, warn_every, verbosity > 0); // sleep for total_count (seconds) and warn every warn_every (seconds)
 
-    // Create a timer thread that will count the number of seconds to record (uses "is_capturing" boolean variable)
-    if (verbosity > 1) 
-        std::cout << "[Main] Initializing timer ...\n";
-
-    int duration = vm["duration"].as<int>(); // acquisition time in ms
+    // Timer thread will time the seconds to record (uses "is_capturing" boolean variable)
     bool is_capturing;
-    std::thread timer_thr(timer, duration, std::ref(is_capturing)); // Timer modifies the is_capturing flag after X millisecons
-
-    if (verbosity > 1) 
-        std::cout << "[Main] Timer initialized\n";
+    std::thread timer_thr(timer, vm["duration"].as<int>(), std::ref(is_capturing)); // Timer will set is_capturing=false when finished
 
     while (!is_capturing) {
         std::cout << "[Main] Waiting timer to fire ...\n";
         continue; // safety check
     }
 
-    // Launch producer and consumer threads
+    /*
+     * Initialize consumer-producer queues
+     */
 
-    std::thread p_rs_thr, p_pt_thr;
-    std::thread c_rs_thr, c_pt_thr;
+    std::thread p_rs_thr, p_pt_thr; // producers
+    std::thread c_rs_thr, c_pt_thr; // consumers
 
-    if (verbosity > 1) 
-        std::cout << "[Main] Starting RS consumer/producer threads ...\n";
+    SafeQueue<std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t>> queue_rs; // used when both color + depth
+    SafeQueue<std::pair<cv::Mat,timestamp_t>> queue_rs_c, queue_rs_d; // used when color or depth only
+    SafeQueue<std::pair<cv::Mat,timestamp_t>> queue_pt;
+
+    // Producer threads initialization
+
+    if (verbosity > 1) std::cout << "[Main] Starting RS consumer/producer threads ...\n";
+    // rs-related producers
     if (use_color && use_depth) 
         p_rs_thr = std::thread(produce_realsense, std::ref(pipe_rs), std::ref(profile), std::ref(queue_rs), std::ref(is_capturing), verbosity > 2);
     else if (use_color)
         p_rs_thr = std::thread(produce_realsense_color, std::ref(pipe_rs), std::ref(profile), std::ref(queue_rs_c), std::ref(is_capturing), verbosity > 2);
     else if (use_depth)
         p_rs_thr = std::thread(produce_realsense_depth, std::ref(pipe_rs), std::ref(profile), std::ref(queue_rs_d), std::ref(is_capturing), verbosity > 2);
-
+    // pt producer
     if (use_thermal) 
         p_pt_thr = std::thread(produce_purethermal, std::ref(pipe_pt), std::ref(queue_pt), std::ref(is_capturing), verbosity > 2);
-    if (verbosity > 1) 
-        std::cout << "[Main] Producer threads started ...\n";
 
-    if (verbosity > 1) 
-        std::cout << "[Main] Starting consumer threads ...\n";
+    if (verbosity > 1) std::cout << "[Main] Producer threads started ...\n";
+
+    // Consumer threads initialization
+
+    if (verbosity > 1) std::cout << "[Main] Starting consumer threads ...\n";
+    // rs-related consumers
     if (use_color && use_depth)
         c_rs_thr = std::thread(consume_realsense, std::ref(queue_rs), std::ref(is_capturing), parent, verbosity > 2);
     else if (use_color)
         c_rs_thr = std::thread(consume_realsense_color, std::ref(queue_rs_c), std::ref(is_capturing), parent, verbosity > 2);
     else if (use_depth)
         c_rs_thr = std::thread(consume_realsense_depth, std::ref(queue_rs_d), std::ref(is_capturing), parent, verbosity > 2);
+    // pt consumer
     if (use_thermal) 
         c_pt_thr = std::thread(consume_purethermal, std::ref(queue_pt), std::ref(is_capturing), parent, verbosity > 2);
-    if (verbosity > 1) 
-        std::cout << "[Main] Consumer threads started ...\n";
+
+    if (verbosity > 1) std::cout << "[Main] Consumer threads started ...\n";
 
     /* Visualization loop. imshow needs to be in the main thread! */
 
@@ -626,74 +672,86 @@ int main(int argc, char * argv[]) try
     // Open visualization window
     cv::namedWindow("Viewer");
 
+    // If peek fails for some stream, the previous frame is shown.
+    cv::Mat c, d, t;
     while (is_capturing)
     {
-        try 
-        {
-            std::vector<cv::Mat> frames;
+        std::vector<cv::Mat> frames;
 
-            if (use_color && use_depth)
+        if (use_color && use_depth)
+        {
+            try
             {
                 std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t> rs_peek = queue_rs.peek();
-                cv::Mat c = rs_peek.first.first;
-                cv::Mat d = uls::DepthFrame::to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
-                frames.push_back(c);
-                frames.push_back(d);
-                
-            }
-            else if (use_color)
-            {
-                std::pair<cv::Mat,timestamp_t> rs_peek = queue_rs_c.peek();
-                cv::Mat c = rs_peek.first;
-                if (find_pattern_on_color)
-                {
-                    cv::Mat c_gray;
-                    cv::cvtColor(c, c_gray, cv::COLOR_BGR2GRAY);
-                    cv::Mat corners;
-                    bool found = cv::findChessboardCorners(c_gray, pattern_size, corners, 
-                                                        cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
-                    cv::drawChessboardCorners(c, pattern_size, corners, found);
-                }
-                frames.push_back(c);
-            }
-            else if (use_depth)
-            {
-                std::pair<cv::Mat,timestamp_t> rs_peek = queue_rs_d.peek();
-                cv::Mat d = uls::DepthFrame::to_8bit(rs_peek.first, cv::COLORMAP_JET);
-                frames.push_back(d);
-            }
+                c = rs_peek.first.first;
+                d = uls::DepthFrame::to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
+                if (find_pattern_color)
+                    find_and_draw_chessboard(c, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
 
-            if (use_thermal)
+            }
+            catch (std::runtime_error & e)
+            {
+                std::cout << e.what() << '\n';
+            }
+            frames.push_back(c);
+            frames.push_back(d);
+        }
+        else if (use_color)
+        {
+            try
+            {          
+                std::pair<cv::Mat,timestamp_t> rs_peek = queue_rs_c.peek();
+                c = rs_peek.first;
+                if (find_pattern_color)
+                    find_and_draw_chessboard(c, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
+            }
+            catch (const std::runtime_error & e)
+            {
+                std::cerr << e.what() << '\n';
+            }
+            frames.push_back(c);
+        }
+        else if (use_depth)
+        {
+            try {
+                std::pair<cv::Mat,timestamp_t> rs_peek = queue_rs_d.peek();
+                d = uls::DepthFrame::to_8bit(rs_peek.first, cv::COLORMAP_JET);
+            }
+            catch (const std::runtime_error & e)
+            {
+                std::cerr << e.what() << '\n';
+            }
+            frames.push_back(d);
+        }
+
+        if (use_thermal)
+        {
+            try
             {
                 std::pair<cv::Mat,timestamp_t> pt_peek = queue_pt.peek();
-                cv::Mat t = uls::ThermalFrame::to_8bit(pt_peek.first);
-                if (find_pattern_on_color)
-                {
-                    cv::Mat corners;
-                    bool found = cv::findChessboardCorners(t, pattern_size, corners, 
-                                                           cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
-                    cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
-                    cv::drawChessboardCorners(t, pattern_size, corners, found);
-                }
-                else
-                {
-                    cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
-                }
-                frames.push_back(t);
+                t = uls::ThermalFrame::to_8bit(pt_peek.first);
+                cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
+                if (find_pattern_thermal)
+                    find_and_draw_chessboard(t, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
             }
-
-            cv::Mat tiling;
-            uls::tile(frames, 426, 240*frames.size(), 1, frames.size(), tiling);
-
-            cv::imshow("Viewer", tiling);
-            cv::waitKey(1);
-        } 
-        catch (std::runtime_error e) 
-        {
-            if (verbosity > 2) 
-                std::cerr << e.what() << std::endl;
+            catch (std::runtime_error & e)
+            {
+                std::cerr << e.what() << '\n';
+            }
+            frames.push_back(t);
         }
+
+        // Error handling: before imshow, wait at least one frame captured for each active modality
+        if ((use_color && c.empty()) || (use_depth && d.empty()) || (use_thermal && t.empty()))
+            continue;
+        
+        cv::Mat tiling;
+        uls::tile(frames, 426, 240*frames.size(), 1, frames.size(), tiling);
+
+        cv::imshow("Viewer", tiling);
+        cv::waitKey(1);
     }
+
     if (verbosity > 1) 
         std::cout << "[Main] Capturing ended ...\n";
 
