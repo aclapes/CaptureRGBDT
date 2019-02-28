@@ -673,55 +673,55 @@ int main(int argc, char * argv[]) try
     cv::namedWindow("Viewer");
 
     // If peek fails for some stream, the previous frame is shown.
-    cv::Mat c, d, t;
+    std::vector<cv::Mat> frames = {cv::Mat(),  // color
+                                   cv::Mat(),  // depth
+                                   cv::Mat()}; // thermal
     while (is_capturing)
     {
-        std::vector<cv::Mat> frames;
-
         if (use_color && use_depth)
         {
             try
             {
                 std::pair<std::pair<cv::Mat,cv::Mat>,timestamp_t> rs_peek = queue_rs.peek();
-                c = rs_peek.first.first;
-                d = uls::DepthFrame::to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
-                if (find_pattern_color)
-                    find_and_draw_chessboard(c, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
+                frames[0] = rs_peek.first.first;
+                frames[1] = uls::DepthFrame::to_8bit(rs_peek.first.second, cv::COLORMAP_JET);
+                if (find_pattern_color) {
+                                        cv::resize(frames[0],frames[0],cv::Size(640,360));
 
+                    find_and_draw_chessboard(frames[0], pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
+                }
             }
-            catch (std::runtime_error & e)
+            catch (const std::runtime_error & e)
             {
                 std::cout << e.what() << '\n';
             }
-            frames.push_back(c);
-            frames.push_back(d);
         }
         else if (use_color)
         {
             try
             {          
                 std::pair<cv::Mat,timestamp_t> rs_peek = queue_rs_c.peek();
-                c = rs_peek.first;
+                frames[0] = rs_peek.first;
                 if (find_pattern_color)
-                    find_and_draw_chessboard(c, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
+                {
+                    find_and_draw_chessboard(frames[0], pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
+                }
             }
             catch (const std::runtime_error & e)
             {
                 std::cerr << e.what() << '\n';
             }
-            frames.push_back(c);
         }
         else if (use_depth)
         {
             try {
                 std::pair<cv::Mat,timestamp_t> rs_peek = queue_rs_d.peek();
-                d = uls::DepthFrame::to_8bit(rs_peek.first, cv::COLORMAP_JET);
+                frames[1] = uls::DepthFrame::to_8bit(rs_peek.first, cv::COLORMAP_JET);
             }
             catch (const std::runtime_error & e)
             {
                 std::cerr << e.what() << '\n';
             }
-            frames.push_back(d);
         }
 
         if (use_thermal)
@@ -729,22 +729,21 @@ int main(int argc, char * argv[]) try
             try
             {
                 std::pair<cv::Mat,timestamp_t> pt_peek = queue_pt.peek();
-                t = uls::ThermalFrame::to_8bit(pt_peek.first);
-                cv::cvtColor(t, t, cv::COLOR_GRAY2BGR);
+                frames[2] = uls::ThermalFrame::to_8bit(pt_peek.first);
+                cv::cvtColor(frames[2], frames[2], cv::COLOR_GRAY2BGR);
                 if (find_pattern_thermal)
-                    find_and_draw_chessboard(t, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
+                    find_and_draw_chessboard(frames[2], pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK);
             }
-            catch (std::runtime_error & e)
+            catch (const std::runtime_error & e)
             {
                 std::cerr << e.what() << '\n';
             }
-            frames.push_back(t);
         }
 
         // Error handling: before imshow, wait at least one frame captured for each active modality
-        if ((use_color && c.empty()) || (use_depth && d.empty()) || (use_thermal && t.empty()))
+        if ((use_color && frames[0].empty()) || (use_depth && frames[1].empty()) || (use_thermal && frames[2].empty()))
             continue;
-        
+
         cv::Mat tiling;
         uls::tile(frames, 426, 240*frames.size(), 1, frames.size(), tiling);
 

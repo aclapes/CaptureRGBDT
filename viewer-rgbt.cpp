@@ -28,12 +28,6 @@ namespace
  
 } // namespace
 
-struct Timestamp
-{
-    std::string id;
-    int64_t time;
-};
-
 std::vector<std::string> tokenize(std::string s, std::string delimiter)
 {
     std::vector<std::string> tokens;
@@ -51,11 +45,11 @@ std::vector<std::string> tokenize(std::string s, std::string delimiter)
     return tokens;
 }
 
-Timestamp process_log_line(std::string line)
+uls::Timestamp process_log_line(std::string line)
 {
     std::vector<std::string> tokens = tokenize(line, ",");
 
-    Timestamp ts;
+    uls::Timestamp ts;
     ts.id = tokens.at(0);
     std::istringstream iss (tokens.at(1));
     iss >> ts.time;
@@ -63,14 +57,14 @@ Timestamp process_log_line(std::string line)
     return ts;
 }
 
-std::vector<Timestamp> read_log_file(fs::path log_path)
+std::vector<uls::Timestamp> read_log_file(fs::path log_path)
 {
     std::ifstream log (log_path.string());
     std::string line;
-    std::vector<Timestamp> tokenized_lines;
+    std::vector<uls::Timestamp> tokenized_lines;
     if (log.is_open()) {
         while (std::getline(log, line)) {
-            Timestamp ts = process_log_line(line);
+            uls::Timestamp ts = process_log_line(line);
             tokenized_lines.push_back(ts);
         }
         log.close();
@@ -78,66 +72,6 @@ std::vector<Timestamp> read_log_file(fs::path log_path)
 
     return tokenized_lines;
 }
-
-void time_sync(std::vector<Timestamp> log_a, std::vector<Timestamp> log_b, std::vector<std::pair<Timestamp,Timestamp> > & log_synced, int64_t eps = 50, bool verbose = true)
-{
-    std::vector<Timestamp> master;
-    std::vector<Timestamp> slave;
-    if (log_a.size() > log_b.size())
-    {
-        master = log_a;
-        slave  = log_b;
-        if (verbose) std::cout << "a is master, b is slave\n";
-    } else {
-        master = log_b;
-        slave  = log_a;
-        if (verbose) std::cout << "b is master, a is slave\n";
-    }
-
-    int j = 0;
-
-    for (int i = 0; i < master.size(); i++) 
-    {
-        Timestamp ts_m = master[i];
-        std::vector<std::pair<Timestamp, int64_t> > matches;
-        while (j < slave.size() && slave[j].time < ts_m.time + eps)
-        {
-            int64_t dist = abs(ts_m.time - slave[j].time);
-            if (dist < eps)
-            {
-                matches.push_back( std::pair<Timestamp,int64_t>(slave[j], dist) );
-            }
-            j++;
-        }
-
-        if (!matches.empty())
-        {
-            std::pair<Timestamp, int64_t> m_best = matches[0];
-            for (int k = 1; k < matches.size(); k++)
-            {
-                if (matches[k].second < m_best.second)
-                    m_best = matches[k];
-            }
-
-            std::pair<Timestamp,Timestamp> synced_pair;
-            synced_pair.first  = log_a.size() > log_b.size() ? master[i] : m_best.first;
-            synced_pair.second = log_a.size() > log_b.size() ? m_best.first : master[i];
-            log_synced.push_back(synced_pair);
-        }
-        // elif fill_with_previous:
-        //     all_matches.append( ((i, ts_m), all_matches[-1][1]) ), ts_m in enumerate(master)
-    }
-
-    // for (auto log : log_synced)
-    // {
-    //     std::cout << log.first.time << "," << log.second.time << '\n';
-    // }
-    for (int i = 0; i < log_synced.size(); i++)
-    {
-        std::cout << log_synced[i].first.time << "," << log_synced[i].second.time << '\n';
-    }
-}
-
 
 int main(int argc, char * argv[]) try
 {
@@ -178,11 +112,11 @@ int main(int argc, char * argv[]) try
     fs::path log_rs_path (input_dir / fs::path("rs.log"));
     fs::path log_pt_path (input_dir / fs::path("pt.log"));
 
-    std::vector<Timestamp> log_rs = read_log_file(log_rs_path);
-    std::vector<Timestamp> log_pt = read_log_file(log_pt_path);
+    std::vector<uls::Timestamp> log_rs = read_log_file(log_rs_path);
+    std::vector<uls::Timestamp> log_pt = read_log_file(log_pt_path);
 
-    std::vector<std::pair<Timestamp,Timestamp> > log_synced;
-    time_sync(log_rs, log_pt, log_synced);
+    std::vector<std::pair<uls::Timestamp,uls::Timestamp> > log_synced;
+    uls::time_sync(log_rs, log_pt, log_synced);
 
     fs::path color_path (input_dir / fs::path("rs/color/"));
     fs::path depth_path (input_dir / fs::path("rs/depth/"));
@@ -197,8 +131,8 @@ int main(int argc, char * argv[]) try
     for (int i = 0; i < log_synced.size() - 1; i++)
     {
         // read timestamps
-        Timestamp rs_ts = log_synced[i].first;
-        Timestamp pt_ts = log_synced[i].second;
+        uls::Timestamp rs_ts = log_synced[i].first;
+        uls::Timestamp pt_ts = log_synced[i].second;
 
         // read frames
         cv::Mat c = cv::imread(fs::path(color_path / fs::path("c_" + rs_ts.id + ".jpg")).string(), CV_LOAD_IMAGE_UNCHANGED);

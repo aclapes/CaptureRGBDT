@@ -55,9 +55,25 @@ add_executable(viewer-rgbt viewer-rgbt.cpp utils.hpp)
 include_directories(viewer-rgbt ${ADDITIONAL_INCLUDE_DIRS})
 target_link_libraries(viewer-rgbt PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
 
-add_executable(calib-thermal-intrinsics calib-thermal-intrinsics.cpp utils.hpp)
-include_directories(calib-thermal-intrinsics ${ADDITIONAL_INCLUDE_DIRS})
-target_link_libraries(calib-thermal-intrinsics PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
+add_executable(calib-intrinsics calib-intrinsics.cpp utils.hpp)
+include_directories(calib-intrinsics ${ADDITIONAL_INCLUDE_DIRS})
+target_link_libraries(calib-intrinsics PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
+
+add_executable(calib-extrinsics calib-extrinsics.cpp utils.hpp)
+include_directories(calib-extrinsics ${ADDITIONAL_INCLUDE_DIRS})
+target_link_libraries(calib-extrinsics PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
+
+add_executable(test_chessboard_detection test_chessboard_detection.cpp utils.hpp)
+include_directories(test_chessboard_detection ${ADDITIONAL_INCLUDE_DIRS})
+target_link_libraries(test_chessboard_detection PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
+
+add_executable(calib-corners calib-corners.cpp utils.hpp)
+include_directories(calib-corners ${ADDITIONAL_INCLUDE_DIRS})
+target_link_libraries(calib-corners PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
+
+# add_executable(people-segmentation-utils people-segmentation-utils.cpp)
+# include_directories(people-segmentation-utils ${ADDITIONAL_INCLUDE_DIRS})
+# target_link_libraries(people-segmentation-utils PRIVATE ${OpenCV_LIBS})
 
 # Post Build script to copy realsense2.dll
 if(WIN32)
@@ -71,9 +87,6 @@ endif()
 
 install(
     TARGETS
-
-    capture-rgbt
-    viewer-rgbt
 
     RUNTIME DESTINATION
     ${CMAKE_INSTALL_PREFIX}/bin

@@ -11,19 +11,56 @@
 #include <opencv2/opencv.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/foreach.hpp>
+#include <random>
+#include <algorithm>
+#include <iterator>
+#include <iostream>
 
 namespace fs = boost::filesystem;
 
 namespace uls
 {
+    /*
+     * Wrapper to cv::resize with automatic padding to keep aspect ratio
+     */
+    void resize(cv::Mat src, cv::Mat & dst, cv::Size s)
+    {
+        if (s.empty() || (src.rows == s.height && src.cols == s.width))
+            src.copyTo(dst);
+        else
+        {
+            float ratio_1 = ((float) s.width) / s.height;
+            float ratio_2 = ((float) src.cols) / src.rows;
+
+            cv::Size new_domain, offset;
+
+            if (ratio_2 < ratio_1)
+            {
+                new_domain = cv::Size(s.height * ratio_2, s.height);
+                offset = cv::Size((s.width - new_domain.height * ratio_2)/2., 0);
+            }
+            else
+            {
+                new_domain = cv::Size(new_domain.width, new_domain.width / ratio_2);
+                offset = cv::Size(0, (s.height - new_domain.width / ratio_2)/2.);
+            }
+
+            cv::resize(src, dst, new_domain);
+            cv::copyMakeBorder(dst, dst, 
+                                offset.height, offset.height,
+                                offset.width,  offset.width, 
+                                cv::BORDER_CONSTANT);
+        }
+    }
+
     class ThermalFrame
     {
         public:
-            ThermalFrame(fs::path path, cv::Size s = cv::Size(640,480))
+            ThermalFrame(fs::path path, cv::Size s = cv::Size())
             {
                 img = cv::imread(path.string(), CV_LOAD_IMAGE_UNCHANGED);
                 img = ThermalFrame::to_8bit(img);
-                cv::resize(img, img, s);
+                resize(img, img, s);
             }
 
             static cv::Mat to_8bit(cv::Mat data)
@@ -50,10 +87,10 @@ namespace uls
     class DepthFrame
     {
         public:
-            DepthFrame(fs::path path, cv::Size s = cv::Size(640,480))
+            DepthFrame(fs::path path, cv::Size s = cv::Size())
             {
                 img = cv::imread(path.string(), CV_LOAD_IMAGE_UNCHANGED);
-                cv::resize(img, img, s);
+                resize(img, img, s);
             }
 
             cv::Mat mat() 
@@ -88,11 +125,11 @@ namespace uls
     class ColorFrame
     {
         public:
-            ColorFrame(fs::path path) //, cv::Size s = cv::Size(640,480))
+            ColorFrame(fs::path path, cv::Size s = cv::Size())
             {
                 img = cv::imread(path.string(), CV_LOAD_IMAGE_UNCHANGED);
                 cv::cvtColor(img, img, cv::COLOR_BGR2GRAY);
-                // cv::resize(img, img, s);
+                resize(img, img, s);
             }
 
             cv::Mat mat() 
@@ -102,6 +139,19 @@ namespace uls
 
         private:
             cv::Mat img;
+    };
+
+    struct Timestamp
+    {
+        std::string id;
+        int64_t time;
+    };
+
+    struct Frame
+    {
+        fs::path path;
+        int64_t time;
+        cv::Mat img;
     };
 
     // cv::Mat read_thermal_frame(fs::path path, cv::Size s = cv::Size(640,480))
@@ -114,6 +164,19 @@ namespace uls
     //     return img;
     // }
 
+    std::vector<int> permutation(int n)
+    {
+        std::vector<int> v (n);
+        for (int i = 0; i < n; i++)
+            v[i] = i;
+
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(v.begin(), v.end(), g);
+
+        return v;
+    }
+
     void tile(std::vector<cv::Mat> src, int tile_width, int tile_height, int grid_x, int grid_y, cv::Mat & dst) 
     {
         // patch size
@@ -121,7 +184,8 @@ namespace uls
         int height = tile_height / grid_y;
         float aspect_ratio = ((float) src[0].cols) / src[0].rows;
 
-        dst.create(tile_height, tile_width, CV_8UC3);
+        dst.create(tile_height, tile_width, src[0].type());
+        dst.setTo(0);
 
         // iterate through grid
         int k = 0;
@@ -129,34 +193,103 @@ namespace uls
         {
             for(int j = 0; j < grid_x; j++) 
             {
-                cv::Mat m = src[k++];
-                if ( (((float) m.cols) / m.rows) < aspect_ratio)
+                if (k < src.size())
                 {
-                    int new_cols = floor(m.rows * aspect_ratio);
-                    int fill_size = new_cols - m.cols;
-                    cv::copyMakeBorder(m, m, 0, 0, fill_size/2, fill_size/2, cv::BORDER_CONSTANT);
-                }
+                    cv::Mat m = src[k++];
 
-                cv::resize(m, m, cv::Size(width, height));
-                m.copyTo(dst(cv::Rect(j*width, i*height, width, height)));            
+                    assert(m.type() == dst.type());
+
+                    if ( (((float) m.cols) / m.rows) < aspect_ratio)
+                    {
+                        int new_cols = floor(m.rows * aspect_ratio);
+                        int fill_size = new_cols - m.cols;
+                        cv::copyMakeBorder(m, m, 0, 0, fill_size/2, fill_size/2, cv::BORDER_CONSTANT);
+                    }
+
+                    cv::resize(m, m, cv::Size(width, height));
+                    m.copyTo(dst(cv::Rect(j*width, i*height, width, height))); 
+                }
             }
         }
     }
 
-    std::vector<fs::path> list_files_in_directory(fs::path input_dir, std::string file_ext)
+    cv::Mat orient_corners(cv::Mat src)
     {
-        std::vector<fs::path> files;
+        cv::Mat dst;
+        cv::Point2f pi, pf;
 
-        fs::directory_iterator it(input_dir), eod;  
+        pi = src.at<cv::Point2f>(0,0);
+        pf = src.at<cv::Point2f>(0,src.cols-1);
+        if (pi.x < pf.x && pi.y < pf.y)
+            return src;
+        else
+        {
+            cv::Mat oriented;
+            cv::flip(src, oriented, 1);
+            return oriented;
+        }             
+    }
+
+    std::vector<std::string> list_files_in_directory(std::string input_dir, std::string prefix, std::string file_ext)
+    {
+        std::vector<std::string> files;
+
+        fs::path input_dir_fs (input_dir);
+        fs::directory_iterator it(input_dir_fs), eod;  
         BOOST_FOREACH(const fs::path &p, std::make_pair(it, eod))   
         { 
             if(fs::is_regular_file(p) && fs::extension(p) == file_ext)
             {
-                files.push_back(p);
+                files.push_back(p.string());
             } 
         }
 
         return files;
+    }
+
+    std::vector<std::string> tokenize(std::string s, std::string delimiter)
+    {
+        std::vector<std::string> tokens;
+
+        size_t pos = 0;
+        std::string token;
+        while ((pos = s.find(delimiter)) != std::string::npos) 
+        {
+            token = s.substr(0, pos);
+            tokens.push_back(token);
+            s.erase(0, pos + delimiter.length());
+        }
+        tokens.push_back(s); // last token
+
+        return tokens;
+    }
+
+    uls::Timestamp process_log_line(std::string line)
+    {
+        std::vector<std::string> tokens = tokenize(line, ",");
+
+        uls::Timestamp ts;
+        ts.id = tokens.at(0);
+        std::istringstream iss (tokens.at(1));
+        iss >> ts.time;
+        
+        return ts;
+    }
+
+    std::vector<uls::Timestamp> read_log_file(fs::path log_path)
+    {
+        std::ifstream log (log_path.string());
+        std::string line;
+        std::vector<uls::Timestamp> tokenized_lines;
+        if (log.is_open()) {
+            while (std::getline(log, line)) {
+                uls::Timestamp ts = process_log_line(line);
+                tokenized_lines.push_back(ts);
+            }
+            log.close();
+        }
+
+        return tokenized_lines;
     }
 
     void print_mat_info(cv::Mat m)
@@ -167,6 +300,23 @@ namespace uls
         std::cout << "Type: " << m.type() << '\n';
     }
 
+    void align_pattern_corners(cv::Mat a, cv::Mat b, cv::Size pattern_a, cv::Size pattern_b, cv::Mat & aa, cv::Mat & bb, cv::Size & pattern)
+    {
+        cv::Mat a_ = a.reshape(a.channels(), pattern_a.height);
+        cv::Mat b_ = b.reshape(b.channels(), pattern_b.height);
+
+        int min_rows = std::min(a_.rows, b_.rows);
+        int min_cols = std::min(a_.cols, b_.cols);
+
+        aa = a_(cv::Rect((a_.cols-min_cols)/2, (a_.rows-min_rows)/2, min_cols, min_rows));
+        bb = b_(cv::Rect((b_.cols-min_cols)/2, (b_.rows-min_rows)/2, min_cols, min_rows));
+
+        aa = aa.clone().reshape(a_.channels(), 1);
+        bb = bb.clone().reshape(b_.channels(), 1);
+
+        pattern.height = min_rows;
+        pattern.width = min_cols;
+    }
 
     cv::Mat corners_2d_reference_positions(cv::Size pattern_size)
     {
@@ -237,10 +387,12 @@ namespace uls
     }
 
     template<typename T>
-    void find_chessboard_corners(std::vector<fs::path> frames, 
+    void find_chessboard_corners(std::vector<std::string> frames, 
                                  cv::Size pattern_size, 
                                  std::vector<cv::Mat> & frames_corners,
                                  std::vector<int> & frames_inds,
+                                 cv::Size resize_dims = cv::Size(),
+                                 std::string prefix = "",
                                  bool verbose = true) 
     {
         frames_corners.clear();
@@ -253,33 +405,43 @@ namespace uls
         for (int i = 0; i < frames.size(); i++) 
         {
             /* read and preprocess frame */
-            cv::Mat img = T(frames[i]).mat();
+            cv::Mat img = T(fs::path(prefix) / fs::path(frames[i]), resize_dims).mat();
 
             corners.release();
+            // cv::GaussianBlur(fra, img, cv::Size(0, 0), 3);
+            // cv::addWeighted(fra, 1.5, img, -0.5, 0, img);
             bool chessboard_found = findChessboardCorners(img, pattern_size, corners, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE);
             
             if (chessboard_found) 
             {
-                cornerSubPix(img, corners, cv::Size(15, 15), cv::Size(5, 5), cv::TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
+                cornerSubPix(img, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
                 tracking_enabled = true;
             }
             else if (tracking_enabled)
             {
                 cv::Mat status, err;
                 cv::calcOpticalFlowPyrLK(img_prev, img, corners_prev, corners, status, err, cv::Size(7,7));
-                cornerSubPix(img, corners, cv::Size(15, 15), cv::Size(5, 5), cv::TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
+                cornerSubPix(img, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
                 // error checking
-                if ( !check_corners_integrity(status, pattern_size) || !check_corners_2d_positions(corners, pattern_size) )
+                if ( ! check_corners_integrity(status, pattern_size) )
                 {
                     tracking_enabled = false;
                     corners.release();
                 }
             }
 
-            if (!corners.empty()) 
+            if (tracking_enabled)
             {
-                frames_corners.push_back(corners);
-                frames_inds.push_back(i);
+                if ((corners.rows == pattern_size.width * pattern_size.height) && check_corners_2d_positions(corners, pattern_size))
+                {
+                    frames_corners.push_back(corners);
+                    frames_inds.push_back(i);
+                }
+                else
+                {
+                    corners.release();
+                    tracking_enabled = false;
+                }
             }
 
             if (verbose)
@@ -325,6 +487,173 @@ namespace uls
         }
 
         return dst;
+    }
+
+    void _transform_point_domain(cv::Mat src, cv::Size dom_src, cv::Size dom_dst, cv::Mat & dst)
+    {
+        dst.release();
+        dst.create(src.rows, src.cols, src.type());
+
+        float ratio_1 = ((float) dom_dst.width) / dom_dst.height;
+        float ratio_2 = ((float) dom_src.width) / dom_src.height;
+
+        cv::Size new_domain;
+        cv::Size offset;
+
+        if (ratio_2 < ratio_1)
+        {
+            new_domain = cv::Size(dom_dst.height * ratio_2, dom_dst.height);
+            offset = cv::Size((dom_dst.width - dom_dst.height * ratio_2)/2., 0);
+        }
+        else
+        {
+            new_domain = cv::Size(dom_dst.width, dom_dst.width / ratio_2);
+            offset = cv::Size(0, (dom_dst.height - dom_dst.width / ratio_2)/2.);
+        }
+
+        for (int i = 0; i < src.rows; i++) 
+        {
+            for (int j = 0; j < src.cols; j++)
+            {
+                cv::Point2f p = src.at<cv::Point2f>(i,j);
+                float p_x = (p.x / dom_src.width) * new_domain.width;
+                float p_y = (p.y / dom_src.height) * new_domain.height;
+                dst.at<cv::Point2f>(i,j) = cv::Point2f(p_x + offset.width, p_y + offset.height);
+            }
+        }
+    }
+
+    void transform_point_domains(cv::Mat points_1, cv::Mat points_2, cv::Size dom_1, cv::Size dom_2, cv::Mat & points_1_transf, cv::Mat & points_2_transf, cv::Size & dom_transf)
+    {
+        points_1_transf.release();
+        points_2_transf.release();
+
+        dom_transf = cv::Size (std::max(dom_1.width, dom_2.width), std::max(dom_1.height, dom_2.height));
+        _transform_point_domain(points_1, dom_1, dom_transf, points_1_transf);
+        _transform_point_domain(points_2, dom_2, dom_transf, points_2_transf);
+    }
+
+    void time_sync(std::vector<Timestamp> log_a, std::vector<Timestamp> log_b, std::vector<std::pair<Timestamp,Timestamp> > & log_synced, int64_t eps = 50, bool verbose = true)
+    {
+        std::vector<Timestamp> master;
+        std::vector<Timestamp> slave;
+        if (log_a.size() > log_b.size())
+        {
+            master = log_a;
+            slave  = log_b;
+            if (verbose) std::cout << "a is master, b is slave\n";
+        } else {
+            master = log_b;
+            slave  = log_a;
+            if (verbose) std::cout << "b is master, a is slave\n";
+        }
+
+        int j = 0;
+
+        for (int i = 0; i < master.size(); i++) 
+        {
+            Timestamp ts_m = master[i];
+            std::vector<std::pair<Timestamp, int64_t> > matches;
+            while (j < slave.size() && slave[j].time < ts_m.time + eps)
+            {
+                int64_t dist = abs(ts_m.time - slave[j].time);
+                if (dist < eps)
+                {
+                    matches.push_back( std::pair<Timestamp,int64_t>(slave[j], dist) );
+                }
+                j++;
+            }
+
+            if (!matches.empty())
+            {
+                std::pair<Timestamp, int64_t> m_best = matches[0];
+                for (int k = 1; k < matches.size(); k++)
+                {
+                    if (matches[k].second < m_best.second)
+                        m_best = matches[k];
+                }
+
+                std::pair<Timestamp,Timestamp> synced_pair;
+                synced_pair.first  = log_a.size() > log_b.size() ? master[i] : m_best.first;
+                synced_pair.second = log_a.size() > log_b.size() ? m_best.first : master[i];
+                log_synced.push_back(synced_pair);
+            }
+            // elif fill_with_previous:
+            //     all_matches.append( ((i, ts_m), all_matches[-1][1]) ), ts_m in enumerate(master)
+        }
+
+        // for (auto log : log_synced)
+        // {
+        //     std::cout << log.first.time << "," << log.second.time << '\n';
+        // }
+
+        if (verbose)
+        {
+            for (int i = 0; i < log_synced.size(); i++)
+            {
+                std::cout << log_synced[i].first.time << "," << log_synced[i].second.time << '\n';
+            }
+        }
+    }
+
+    void time_sync(std::vector<Timestamp> log_a, std::vector<Timestamp> log_b, std::vector<std::pair<int,int> > & log_pairs, int64_t eps = 50, bool verbose = true)
+    {
+        log_pairs.clear();
+
+        // std::vector<std::pair<Timestamp,Timestamp> > log_synced;
+
+        std::vector<Timestamp> master;
+        std::vector<Timestamp> slave;
+        if (log_a.size() > log_b.size())
+        {
+            master = log_a;
+            slave  = log_b;
+            if (verbose) std::cout << "a is master, b is slave\n";
+        } else {
+            master = log_b;
+            slave  = log_a;
+            if (verbose) std::cout << "b is master, a is slave\n";
+        }
+
+        int j = 0;
+
+        for (int i = 0; i < master.size(); i++) 
+        {
+            Timestamp ts_m = master[i];
+            std::vector<std::pair<int, int64_t> > matches;
+            while (j < slave.size() && slave[j].time < ts_m.time + eps)
+            {
+                int64_t dist = abs(ts_m.time - slave[j].time);
+                if (dist < eps)
+                {
+                    matches.push_back( std::pair<int, int64_t>(j, dist) );
+                }
+                j++;
+            }
+
+            if (!matches.empty())
+            {
+                std::pair<int,int64_t> m_best = matches[0];
+                for (int k = 1; k < matches.size(); k++)
+                {
+                    if (matches[k].second < m_best.second)
+                        m_best = matches[k];
+                }
+                
+                std::pair<int,int> synced_pair;
+                synced_pair.first  = log_a.size() > log_b.size() ? i : m_best.first;
+                synced_pair.second = log_a.size() > log_b.size() ? m_best.first : i;
+                log_pairs.push_back(synced_pair);
+            }
+        }
+
+        // if (verbose)
+        // {
+        //     for (int i = 0; i < log_synced.size(); i++)
+        //     {
+        //         std::cout << log_synced[i].first.time << "," << log_synced[i].second.time << '\n';
+        //     }
+        // }
     }
 }
 
