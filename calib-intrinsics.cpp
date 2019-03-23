@@ -175,15 +175,18 @@ int main(int argc, char * argv[]) try
 
     cv::namedWindow("Viewer");
 
+    int y_shift;
+    corners_fs["y-shift"] >> y_shift;
+
     while (keep_selecting)
     {
         std::cout << k << ":" << ptr[k]+1 << "/" << indices[k].size() << std::endl;
         int idx = indices[k][ptr[k]];//indices_k.at<int>(i,0);
         cv::Mat img;
         if (corners_fs["modality"] == "Color")
-            img = uls::ColorFrame(fs::path(frames_all[idx]), frame_size).mat();
+            img = uls::ColorFrame(fs::path(frames_all[idx]), frame_size, y_shift).mat();
         else if (corners_fs["modality"] == "Thermal") 
-            img = uls::ThermalFrame(fs::path(frames_all[idx]), frame_size).mat();
+            img = uls::ThermalFrame(fs::path(frames_all[idx]), frame_size, y_shift).mat();
 
         cv::Mat corners_aux = corners_all.row(idx).reshape(2, pattern_size.width * pattern_size.height);
         cv::cvtColor(img, img, cv::COLOR_GRAY2BGR);
@@ -267,6 +270,7 @@ int main(int argc, char * argv[]) try
         fstorage_out << "rms" << rms;
         fstorage_out << "resize_dims" << frame_size;
         fstorage_out << "pattern_size" << pattern_size;
+        fstorage_out << "y-shift" << y_shift;
         fstorage_out.release();
     }
 
@@ -274,9 +278,9 @@ int main(int argc, char * argv[]) try
     {
         cv::Mat img;
         if (corners_fs["modality"] == "Color")
-            img = uls::ColorFrame(fs::path(frame_path), frame_size).mat();
+            img = uls::ColorFrame(fs::path(frame_path), frame_size, y_shift).mat();
         else if (corners_fs["modality"] == "Thermal")
-            img = uls::ThermalFrame(fs::path(frame_path), frame_size).mat();
+            img = uls::ThermalFrame(fs::path(frame_path), frame_size, y_shift).mat();
 
         cv::Mat tmp = img.clone();
         cv::undistort(tmp, img, camera_matrix, dist_coeffs);

@@ -15,6 +15,35 @@
 
 namespace pt
 {
+    class config
+    {
+    private:
+        int height;
+        int width;
+
+    public:
+        config() : height(120), width(160)
+        {
+
+        }
+
+        void set_stream(int w, int h)
+        {
+            height = h;
+            width = w;
+        }
+
+        int get_width()
+        {
+            return width;
+        }
+
+        int get_height()
+        {
+            return height;
+        }
+    };
+
     class pipeline
     {
     private:
@@ -80,12 +109,18 @@ namespace pt
             // uvc_unref_device(dev);
             // uvc_exit(ctx);
         }
-        
+
         void start()
+        {
+            pt::config cfg;
+            start(cfg);
+        }
+        
+        void start(pt::config cfg)
         {
             uvc_error_t res;
 
-                        res = uvc_init(&(this->ctx), NULL);
+            res = uvc_init(&(this->ctx), NULL);
             if (res < 0) {
                 uvc_perror(res, "uvc_init");
                 throw std::runtime_error("uvc_init failed");
@@ -115,7 +150,8 @@ namespace pt
             res = uvc_get_stream_ctrl_format_size(
                                                   devh, &ctrl, /* result stored in ctrl */
                                                   UVC_FRAME_FORMAT_Y16, /* YUV 422, aka YUV 4:2:2. try _COMPRESSED */
-                                                  160, 120, 9 /* width, height, fps */
+                                                //   160, 120, 9 /* width, height, fps */
+                                                  cfg.get_width(), cfg.get_height(), 9
                                                   );
             uvc_print_stream_ctrl(&ctrl, stderr);
             if (res < 0) {

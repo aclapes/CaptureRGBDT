@@ -1,5 +1,5 @@
 //
-//  pt_pipeline.hpp
+//  utils.hpp
 //  RealsenseExamplesGettingStarted
 //
 //  Created by Albert Clapés on 27/11/2018.
@@ -56,11 +56,15 @@ namespace uls
     class ThermalFrame
     {
         public:
-            ThermalFrame(fs::path path, cv::Size s = cv::Size())
+            ThermalFrame(fs::path path, cv::Size s = cv::Size(), int y_shift = 0)
             {
                 img = cv::imread(path.string(), CV_LOAD_IMAGE_UNCHANGED);
                 img = ThermalFrame::to_8bit(img);
                 resize(img, img, s);
+                if (y_shift > 0)
+                    cv::copyMakeBorder(img, img, 0, y_shift, 0, 0, cv::BORDER_CONSTANT);
+                else if (y_shift < 0)
+                    cv::copyMakeBorder(img, img, abs(y_shift), 0, 0, 0, cv::BORDER_CONSTANT);
             }
 
             static cv::Mat to_8bit(cv::Mat data)
@@ -87,10 +91,14 @@ namespace uls
     class DepthFrame
     {
         public:
-            DepthFrame(fs::path path, cv::Size s = cv::Size())
+            DepthFrame(fs::path path, cv::Size s = cv::Size(), int y_shift = 0)
             {
                 img = cv::imread(path.string(), CV_LOAD_IMAGE_UNCHANGED);
                 resize(img, img, s);
+                if (y_shift > 0)
+                    cv::copyMakeBorder(img, img, 0, y_shift, 0, 0, cv::BORDER_CONSTANT);
+                else if (y_shift < 0)
+                    cv::copyMakeBorder(img, img, abs(y_shift), 0, 0, 0, cv::BORDER_CONSTANT);
             }
 
             cv::Mat mat() 
@@ -118,6 +126,16 @@ namespace uls
 
                 return falseColorsMap;
             }
+
+            static cv::Mat cut_at(cv::Mat src, float max_z, float min_z = 0, unsigned short val = 0)
+            {
+                cv::Mat dst = src.clone();
+                dst.setTo(val, (src > max_z) | (src < min_z));
+
+
+                return dst;
+            }
+
         private:
             cv::Mat img;
     };
@@ -125,11 +143,15 @@ namespace uls
     class ColorFrame
     {
         public:
-            ColorFrame(fs::path path, cv::Size s = cv::Size())
+            ColorFrame(fs::path path, cv::Size s = cv::Size(), int y_shift = 0)
             {
                 img = cv::imread(path.string(), CV_LOAD_IMAGE_UNCHANGED);
                 cv::cvtColor(img, img, cv::COLOR_BGR2GRAY);
                 resize(img, img, s);
+                if (y_shift > 0)
+                    cv::copyMakeBorder(img, img, 0, y_shift, 0, 0, cv::BORDER_CONSTANT);
+                else if (y_shift < 0)
+                    cv::copyMakeBorder(img, img, abs(y_shift), 0, 0, 0, cv::BORDER_CONSTANT);
             }
 
             cv::Mat mat() 
@@ -184,7 +206,7 @@ namespace uls
         int height = tile_height / grid_y;
         float aspect_ratio = ((float) src[0].cols) / src[0].rows;
 
-        dst.create(tile_height, tile_width, src[0].type());
+        dst.create(tile_height, tile_width, CV_8UC3);
         dst.setTo(0);
 
         // iterate through grid
@@ -193,11 +215,12 @@ namespace uls
         {
             for(int j = 0; j < grid_x; j++) 
             {
-                if (k < src.size())
+                cv::Mat m = src[k++];
+                if (!m.empty())
                 {
-                    cv::Mat m = src[k++];
-
-                    assert(m.type() == dst.type());
+                    // assert(m.type() == dst.type());
+                    if (m.type() != CV_8UC3)
+                        cv::cvtColor(m, m, cv::COLOR_GRAY2BGR);
 
                     if ( (((float) m.cols) / m.rows) < aspect_ratio)
                     {
@@ -393,6 +416,7 @@ namespace uls
                                  std::vector<int> & frames_inds,
                                  cv::Size resize_dims = cv::Size(),
                                  std::string prefix = "",
+                                 int y_shift = 0,
                                  bool verbose = true) 
     {
         frames_corners.clear();
@@ -405,7 +429,7 @@ namespace uls
         for (int i = 0; i < frames.size(); i++) 
         {
             /* read and preprocess frame */
-            cv::Mat img = T(fs::path(prefix) / fs::path(frames[i]), resize_dims).mat();
+            cv::Mat img = T(fs::path(prefix) / fs::path(frames[i]), resize_dims, y_shift).mat();
 
             corners.release();
             // cv::GaussianBlur(fra, img, cv::Size(0, 0), 3);

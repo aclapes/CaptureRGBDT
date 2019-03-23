@@ -55,6 +55,7 @@ int main(int argc, char * argv[]) try
         ("file-ext,x", po::value<std::string>()->default_value(".jpg"), "Image file extension")
         ("pattern,p", po::value<std::string>()->default_value("11,8"), "Pattern size \"x,y\" squares")
         ("resize-dims,r", po::value<std::string>()->default_value("960,720"), "Resize frame to (h,w)")
+         ("y-shift,y", po::value<int>()->default_value(0), "Y-shift")
         // ("verbose,v", po::bool_switch(&verbose), "Verbosity")
         ("verbose,v", po::value<int>()->default_value(0), "")
         ("input-list-file", po::value<std::string>(&input_list_file_str)->required(), "File containing list of calibration sequence directories")
@@ -152,6 +153,7 @@ int main(int argc, char * argv[]) try
     fstorage << "pattern_size" << pattern_size;
     fstorage << "resize_dims" << resize_dims;
     fstorage << "modality" << modality_str;
+    fstorage << "y-shift" << vm["y-shift"].as<int>();
     fstorage << "prefix" << vm["prefix"].as<std::string>();
     fstorage << "log-file" << vm["log-file"].as<std::string>();
     fstorage << "file-extension" << vm["file-ext"].as<std::string>();
@@ -169,9 +171,9 @@ int main(int argc, char * argv[]) try
         std::vector<cv::Mat> corners_aux;
         std::vector<int> fids;
         if (modality_str == "Color")
-            uls::find_chessboard_corners<uls::ColorFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, verbose > 1);
+            uls::find_chessboard_corners<uls::ColorFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, vm["y-shift"].as<int>(), verbose > 1);
         else if (modality_str == "Thermal")
-            uls::find_chessboard_corners<uls::ThermalFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, verbose > 1);
+            uls::find_chessboard_corners<uls::ThermalFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, vm["y-shift"].as<int>(), verbose > 1);
 
         assert(corners_aux.size() == fids.size());
 
