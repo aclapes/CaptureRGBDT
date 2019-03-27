@@ -127,7 +127,8 @@ namespace uls
                 return falseColorsMap;
             }
 
-            static cv::Mat cut_at(cv::Mat src, float max_z, float min_z = 0, unsigned short val = 0)
+            template<typename T>
+            static cv::Mat cut_at(cv::Mat src, float max_z, float min_z = 0, T val = 0)
             {
                 cv::Mat dst = src.clone();
                 dst.setTo(val, (src > max_z) | (src < min_z));
@@ -306,8 +307,14 @@ namespace uls
         std::vector<uls::Timestamp> tokenized_lines;
         if (log.is_open()) {
             while (std::getline(log, line)) {
-                uls::Timestamp ts = process_log_line(line);
-                tokenized_lines.push_back(ts);
+                try {
+                    uls::Timestamp ts = process_log_line(line);
+                    tokenized_lines.push_back(ts);
+                }
+                catch (std::exception & e)
+                {
+                    break;
+                }
             }
             log.close();
         }

@@ -51,6 +51,10 @@ include_directories(capture-rgbt ${ADDITIONAL_INCLUDE_DIRS})
 target_link_libraries(capture-rgbt PRIVATE ${LIBUVC_FOUND} ${REALSENSE2_FOUND} ${Boost_LIBRARIES} ${OpenCV_LIBS})
 # set_target_properties (capture-rgbt PROPERTIES FOLDER Examples)
 
+add_executable(capture-rgbt-rls capture-rgbt-rls.cpp pt_pipeline.hpp safe_queue.hpp pt_pipeline.hpp safe_queue.hpp utils.hpp detection.hpp)
+include_directories(capture-rgbt-rls ${ADDITIONAL_INCLUDE_DIRS})
+target_link_libraries(capture-rgbt-rls PRIVATE ${LIBUVC_FOUND} ${REALSENSE2_FOUND} ${Boost_LIBRARIES} ${OpenCV_LIBS})
+
 add_executable(viewer-rgbt viewer-rgbt.cpp utils.hpp)
 include_directories(viewer-rgbt ${ADDITIONAL_INCLUDE_DIRS})
 target_link_libraries(viewer-rgbt PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
@@ -59,9 +63,9 @@ add_executable(calib-intrinsics calib-intrinsics.cpp utils.hpp)
 include_directories(calib-intrinsics ${ADDITIONAL_INCLUDE_DIRS})
 target_link_libraries(calib-intrinsics PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
 
-add_executable(calib-extrinsics-2 calib-extrinsics.cpp utils.hpp)
-include_directories(calib-extrinsics-2 ${ADDITIONAL_INCLUDE_DIRS})
-target_link_libraries(calib-extrinsics-2 PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
+add_executable(calib-extrinsics calib-extrinsics.cpp utils.hpp)
+include_directories(calib-extrinsics ${ADDITIONAL_INCLUDE_DIRS})
+target_link_libraries(calib-extrinsics PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
 
 add_executable(test_chessboard_detection test_chessboard_detection.cpp utils.hpp)
 include_directories(test_chessboard_detection ${ADDITIONAL_INCLUDE_DIRS})

@@ -253,7 +253,7 @@ int main(int argc, char * argv[]) try
     uls::mat_to_vecvec<cv::Point2f>(corners_selection.reshape(2, corners_selection.rows), image_points);
 
     std::vector<std::vector<cv::Point3f> > object_points (1);
-    uls::calcBoardCornerPositions(pattern_size, 0.05f, 0.05f, object_points[0]);
+    uls::calcBoardCornerPositions(pattern_size, 0.08f, 0.075f, object_points[0]);
     object_points.resize(image_points.size(), object_points[0]);
 
     double rms = cv::calibrateCamera(object_points, image_points, frame_size, camera_matrix, dist_coeffs, rvecs, tvecs);

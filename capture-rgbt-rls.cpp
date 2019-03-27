@@ -15,7 +15,6 @@
 #include <boost/format.hpp>
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string.hpp>
-#include <boost/timer.hpp>
 
 #include "pt_pipeline.hpp"
 #include "safe_queue.hpp"
@@ -47,9 +46,9 @@ namespace
 
 typedef struct
 {
-    std::atomic<bool> capture {true};
-    std::atomic<bool> save_started {false};
-    std::atomic<bool> save_suspended {true};
+    std::atomic<bool> capture;
+    std::atomic<bool> save_started;
+    std::atomic<bool> save_suspended;
 } sync_flags_t;
 
 
@@ -74,21 +73,9 @@ typedef struct
     bool flip;
 } map_t;
 
-typedef struct
-{
-    cv::Mat camera_matrix;
-    cv::Mat dist_coeffs;
-} intrinsics_t;
-
-typedef struct
-{
-    cv::Mat R;
-    cv::Mat T;
-} extrinsics_t;
-
-
-cv::Mat camera_matrix_pt = (cv::Mat_<double>(3,3) << 9.5045533560700073e+02, 0., 6.3047112789381094e+02, 0.,
-       9.4565936858393161e+02, 3.5811018136651228e+02, 0., 0., 1. );
+cv::Mat camera_matrix_pt = (cv::Mat_<double>(3,3) << 9.5045533560700073e+02, 0., 6.3047112789381094e+02, 
+                                                    0., 9.4565936858393161e+02, 3.5811018136651228e+02, 
+                                                    0., 0., 1. );
 cv::Mat dist_coeffs_pt = (cv::Mat_<double>(5,1) <<  -3.3320320049230417e-01, 
                                                     2.0782685727252564e-01,
                                                     -4.5030959847842762e-03, 
@@ -639,122 +626,50 @@ void find_and_draw_chessboard(cv::Mat & img, cv::Size pattern_size, int flags = 
 //     }
 // }
 
-void get_intrinsic_parameters(cv::Mat K, double & fx, double & fy, double & cx, double & cy)
-{
-    fx = K.at<double>(0,0);
-    fy = K.at<double>(1,1);
-    cx = K.at<double>(0,2);
-    cy = K.at<double>(1,2);
-}
-
-void align_to_depth(cv::Mat depth, 
-                    cv::Mat K_depth,
-                    cv::Mat K_other,
-                    std::shared_ptr<extrinsics_t> extrinsics,
-                    cv::Mat & map_x, 
-                    cv::Mat & map_y)
-{
-    double fx_d, fy_d, cx_d, cy_d, fx_o, fy_o, cx_o, cy_o;
-    get_intrinsic_parameters(K_depth, fx_d, fy_d, cx_d, cy_d);
-    get_intrinsic_parameters(K_other, fx_o, fy_o, cx_o, cy_o);
-
-    cv::Mat R = extrinsics->R;
-    cv::Mat T = extrinsics->T;
-
-    double x, y, z;
-    double p_x, p_y, p_z;
-
-    map_x.release();
-    map_y.release();
-
-    map_x.create(depth.size(), CV_32FC1);
-    map_y.create(depth.size(), CV_32FC1);
-
-    for (int i = 0; i < depth.rows; i++)
-    {
-        for (int j = 0; j < depth.cols; j++)
-        {
-            z = depth.at<float>(i,j);
-            if (z > 0)
-            {
-                x = (j - cx_d) * z / fx_d;
-                y = (i - cy_d) * z / fy_d;
-
-                // cv::Mat p = (cv::Mat_<double>(3,1) << x, y, z);
-                // cv::Mat pp = extrinsics->R * p + extrinsics->T;
-                // double pp_x, pp_y, pp_z;
-                // pp_x = pp.at<double>(0,0);
-                // pp_y = pp.at<double>(1,0);
-                // pp_z = pp.at<double>(2,0);
-
-                p_x = (R.at<double>(0,0) * x + R.at<double>(0,1) * y + R.at<double>(0,2) * z) + T.at<double>(0,0);
-                p_y = (R.at<double>(1,0) * x + R.at<double>(1,1) * y + R.at<double>(1,2) * z) + T.at<double>(1,0);
-                p_z = (R.at<double>(2,0) * x + R.at<double>(2,1) * y + R.at<double>(2,2) * z) + T.at<double>(2,0);
-
-                // double xx = (p_x * fx_o / p_z) + cx_o;
-                // double yy = (p_y * fy_o / p_z) + cy_o;
-
-                map_x.at<float>(i,j) = (p_x * fx_o / p_z) + cx_o;
-                map_y.at<float>(i,j) = (p_y * fy_o / p_z) + cy_o;
-            }
-        }
-    }
-
-}
-
 void visualize(std::string win_name,
                SafeQueue<rs_frame_t> & queue_rs, 
                SafeQueue<pt_frame_t> & queue_pt, 
-               std::map<std::string, intrinsics_t> intrinsics,
-               int modality_flags,
                sync_flags_t & sync_flags, 
                std::chrono::duration<double,std::milli> & capture_elapsed,
-               std::shared_ptr<extrinsics_t> extrinsics = NULL,
+               cv::Size pattern_size, 
                int find_pattern_flags = 0,
-               cv::Size pattern_size = cv::Size(6,5)
-)
+               cv::Mat R = cv::Mat(),
+               cv::Mat T = cv::Mat())
 {
     // If peek fails for some stream, the previous frame is shown.
-    // double fx_rs, fy_rs, cx_rs, cy_rs,
-    //        fx_pt, fx_pt, fx_pt, fx_pt;
-    // get_intrinsic_parameters(intrinsics_rs->camera_matrix, fx_rs, fy_rs, cx_rs, cy_rs);
-    // get_intrinsic_parameters(intrinsics_pt->camera_matrix, fx_pt, fx_pt, fx_pt, fx_pt);
+    std::vector<cv::Mat> frames (2); // color, depth, thermal
 
-    bool use_depth = (modality_flags & USE_DEPTH) > 0;
+    double fx_rs = camera_matrix_rs.at<double>(0,0);
+    double fy_rs = camera_matrix_rs.at<double>(1,1);
+    double cx_rs = camera_matrix_rs.at<double>(0,2);
+    double cy_rs = camera_matrix_rs.at<double>(1,2);
 
-    std::vector<cv::Mat> frames (3);
+    double fx_pt = camera_matrix_pt.at<double>(0,0);
+    double fy_pt = camera_matrix_pt.at<double>(1,1);
+    double cx_pt = camera_matrix_pt.at<double>(0,2);
+    double cy_pt = camera_matrix_pt.at<double>(1,2);
 
     while (sync_flags.capture)
     {
         rs_frame_t rs_frame;
         pt_frame_t pt_frame;
-
         cv::Mat depth;
         try 
         {
             rs_frame = queue_rs.peek(33);
-            if (!rs_frame.img_c.empty())
-            {
-                cv::Mat color (rs_frame.img_c.size(), rs_frame.img_c.type());
-                cv::undistort(rs_frame.img_c, color, intrinsics["Color"].camera_matrix, intrinsics["Color"].dist_coeffs);
+            // if (!rs_frame.img_c.empty())
+            // {
+            //     cv::Mat color = rs_frame.img_c.clone();
+            //     if (find_pattern_flags & FIND_PATTERN_ON_COLOR) 
+            //         find_and_draw_chessboard(color, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE/* + cv::CALIB_CB_FAST_CHECK + cv::CALIB_CB_FAST_CHECK*/);
 
-                if (find_pattern_flags & FIND_PATTERN_ON_COLOR) 
-                    find_and_draw_chessboard(color, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE/* + cv::CALIB_CB_FAST_CHECK + cv::CALIB_CB_FAST_CHECK*/);
-
-                frames[0] = color;
-            }
-
+            //     frames[0] = color;
+            // }
             if (!rs_frame.img_d.empty())
             {
-                // depth = uls::DepthFrame::cut_at<float>(rs_frame.img_d.clone(), 4000, 0.f);
-                depth.create(rs_frame.img_d.size(), rs_frame.img_d.type());
+                depth = uls::DepthFrame::cut_at<float>(rs_frame.img_d.clone(), 4000, 0.f);
 
-                if (rs_frame.img_c.empty()) // rs's intrinsics are computed from color stream -> undistort depth if aligned to color
-                    cv::undistort(rs_frame.img_d, depth, intrinsics["Color"].camera_matrix, intrinsics["Color"].dist_coeffs);
-                else
-                    depth = rs_frame.img_d;
-
-                frames[1] = uls::DepthFrame::to_8bit(depth, cv::COLORMAP_BONE);
+                frames[0] = uls::DepthFrame::to_8bit(depth, cv::COLORMAP_BONE);
             }
         }
         catch (const std::runtime_error & e) // catch peek's exception
@@ -762,73 +677,61 @@ void visualize(std::string win_name,
             std::cout << e.what() << '\n';
         }
         
-        if ( !use_depth || (extrinsics && use_depth && !depth.empty()) )
+        try
         {
-            try
+            pt_frame = queue_pt.peek(33);
+            if (!pt_frame.img.empty())
             {
-                pt_frame = queue_pt.peek(33);
-                if (!pt_frame.img.empty())
+                cv::Mat therm = uls::ThermalFrame::to_8bit(pt_frame.img.clone());
+                uls::resize(therm, therm, cv::Size(1280, 720));
+
+                // if ( !(depth.empty() || R.empty() || T.empty()) )
+                // {
+                //     cv::Mat tmp = frames[2].clone();
+                //     cv::undistort(tmp, frames[2], camera_matrix_pt, dist_coeffs_pt);
+
+                //     cv::Mat f2 (720,1280,CV_8UC1);
+                //     f2.setTo(0);
+                //     for (int i = 0; i < depth.rows; i++)
+                //     {
+                //         for (int j = 0; j < depth.cols; j++)
+                //         {
+                //             double x, y, z;
+                //             z = depth.at<float>(i,j);
+                //             if (z > 0)
+                //             {
+                //                 x = (j - cx_rs) * z / fx_rs;
+                //                 y = (i - cy_rs) * z / fy_rs;
+
+                //                 cv::Mat p = (cv::Mat_<double>(3,1) << x, y, z);
+                //                 cv::Mat pp = R * p + T;
+                //                 double pp_x, pp_y, pp_z;
+                //                 pp_x = pp.at<double>(0,0);
+                //                 pp_y = pp.at<double>(1,0);
+                //                 pp_z = pp.at<double>(2,0);
+                //                 double xx = (pp_x * fx_pt / pp_z) + cx_pt;
+                //                 double yy = (pp_y * fy_pt / pp_z) + cy_pt;
+                                
+                //                 if (xx < 1280 && xx > 0 && yy < 720 && yy > 0)
+                //                     f2.at<unsigned char>(i,j) = frames[2].at<unsigned char>(yy,xx);
+                                
+                //             }
+                //         }
+                //     }
+                //     f2.copyTo(frames[2]);
+                // }
+                if (find_pattern_flags & FIND_PATTERN_ON_THERM)
                 {
-                    cv::Mat therm = uls::ThermalFrame::to_8bit(pt_frame.img.clone());
-                    uls::resize(therm, therm, cv::Size(1280,720));
-
-                    cv::Mat tmp = therm.clone();
-                    cv::undistort(tmp, therm, intrinsics["Thermal"].camera_matrix, intrinsics["Thermal"].dist_coeffs);
-
-                    if (extrinsics && use_depth && !depth.empty())
-                    {
-                        cv::Mat map_x, map_y;
-                        align_to_depth(depth, intrinsics["Color"].camera_matrix, intrinsics["Thermal"].camera_matrix, extrinsics, map_x, map_y);
-                        // // cv::Mat therm_aligned (720,1280,CV_8UC1);
-                        // cv::Mat map_x (720, 1280, CV_32FC1);
-                        // cv::Mat map_y (720, 1280, CV_32FC1);
-                        // // therm_aligned.setTo(0);
-                        // // map_x.setTo(-1);
-                        // // map_y.setTo(-1);
-                        // for (int i = 0; i < depth.rows; i++)
-                        // {
-                        //     for (int j = 0; j < depth.cols; j++)
-                        //     {
-                        //         double x, y, z;
-                        //         z = depth.at<float>(i,j);
-                        //         if (z > 0)
-                        //         {
-                        //             x = (j - cx_rs) * z / fx_rs;
-                        //             y = (i - cy_rs) * z / fy_rs;
-
-                        //             cv::Mat p = (cv::Mat_<double>(3,1) << x, y, z);
-                        //             cv::Mat pp = extrinsics->R * p + extrinsics->T;
-                        //             double pp_x, pp_y, pp_z;
-                        //             pp_x = pp.at<double>(0,0);
-                        //             pp_y = pp.at<double>(1,0);
-                        //             pp_z = pp.at<double>(2,0);
-                        //             double xx = (pp_x * fx_pt / pp_z) + cx_pt;
-                        //             double yy = (pp_y * fy_pt / pp_z) + cy_pt;
-                        //             map_x.at<float>(i,j) = xx;
-                        //             map_y.at<float>(i,j) = yy;
-                        //             // if (xx < 1280 && xx > 0 && yy < 720 && yy > 0)
-                        //             //     therm_aligned.at<unsigned char>(i,j) = frames[2].at<unsigned char>(yy,xx);
-                                    
-                        //         }
-                        //     }
-                        // }
-                        // // therm_aligned.copyTo(therm);
-                        cv::remap(therm, therm, map_x, map_y, cv::INTER_LINEAR, cv::BORDER_CONSTANT, 0);
-                    }
-                    
-                    if (find_pattern_flags & FIND_PATTERN_ON_THERM)
-                    {
-                        cv::cvtColor(therm, therm, cv::COLOR_GRAY2BGR);
-                        find_and_draw_chessboard(therm, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE);
-                    }
-
-                    frames[2] = therm;
+                    cv::cvtColor(therm, therm, cv::COLOR_GRAY2BGR);
+                    find_and_draw_chessboard(therm, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE);
                 }
+
+                frames[1] = therm;
             }
-            catch (const std::runtime_error & e) // catch peek's exception
-            {
-                std::cerr << e.what() << '\n';
-            }
+        }
+        catch (const std::runtime_error & e) // catch peek's exception
+        {
+            std::cerr << e.what() << '\n';
         }
 
         // int64_t time_rs, time_pt;
@@ -850,7 +753,7 @@ void visualize(std::string win_name,
             // cv::merge(frames_gray, frames[frames.size()-1]);
 
             cv::Mat tiling;
-            uls::tile(frames, 534, 900, 1, frames.size(), tiling);
+            uls::tile(frames, 640, 720, 1, frames.size(), tiling);
         
             tiling = (sync_flags.save_started && !sync_flags.save_suspended) ? tiling : ~tiling;
 
@@ -1000,27 +903,16 @@ int main(int argc, char * argv[]) try
             std::cout << "[Main] Output directory structure \"" << parent.string() << "\"created\n";
     }
 
-    // bool calibrate = false;
-    std::map<std::string, intrinsics_t> intrinsics;
-    std::shared_ptr<extrinsics_t> extrinsics;
+    bool calibrate = false;
+    cv::Mat R, T;
     if (!vm["calibration-params"].as<std::string>().empty())
     {
         cv::FileStorage fs (vm["calibration-params"].as<std::string>(), cv::FileStorage::READ);
         if (fs.isOpened())
         {
-            std::string modality_1, modality_2;
-            fs["modality-1"] >> modality_1;
-            fs["modality-2"] >> modality_2;
-           
-            fs["camera_matrix_1"] >> intrinsics[modality_1].camera_matrix;
-            fs["camera_matrix_2"] >> intrinsics[modality_2].camera_matrix;
-            fs["dist_coeffs_1"]   >> intrinsics[modality_1].dist_coeffs;
-            fs["dist_coeffs_2"]   >> intrinsics[modality_2].dist_coeffs;
-
-            extrinsics = std::make_shared<extrinsics_t>();
-            fs["R"] >> extrinsics->R;
-            fs["T"] >> extrinsics->T;
-            // calibrate = true;
+            fs["R"] >> R;
+            fs["T"] >> T;
+            calibrate = true;
         }
     }
     // std::string mapx_str ("mapx"), mapy_str ("mapy");
@@ -1102,9 +994,9 @@ int main(int argc, char * argv[]) try
     // std::atomic<bool> is_capturing (true);
     // std::atomic<bool> is_saving (false);
     sync_flags_t sync_flags;
-    // sync_flags.capture = true;
-    // sync_flags.save_started = false;
-    // sync_flags.save_suspended = true;
+    sync_flags.capture = true;
+    sync_flags.save_started = false;
+    sync_flags.save_suspended = true;
 
     // while (!is_capturing) {
     //     std::cout << "[Main] Waiting timer to fire ...\n";
@@ -1118,8 +1010,8 @@ int main(int argc, char * argv[]) try
     std::thread p_rs_thr, p_pt_thr; // producers
     std::thread c_rs_thr, c_pt_thr; // consumers
 
-    SafeQueue<rs_frame_t> queue_rs (1); // set minimum buffer size to 1 (to be able to peek frames in visualize function)
-    SafeQueue<pt_frame_t> queue_pt (1);
+    SafeQueue<rs_frame_t> queue_rs;
+    SafeQueue<pt_frame_t> queue_pt;
 
     // Producer threads initialization
 
@@ -1164,7 +1056,7 @@ int main(int argc, char * argv[]) try
     std::thread save_start_timer(timer, 3000, std::ref(sync_flags.save_started), std::ref(saving_elapsed));
     std::thread capture_timer(timer, 3000 + vm["duration"].as<int>(), std::ref(sync_flags.capture), std::ref(capture_elapsed)); // Timer will set is_capturing=false when finished
     // visualize("Viewer", queue_rs, queue_pt, sync_flags, capture_elapsed, pattern_size, find_pattern_flags, calibrate ? &map_rs : NULL, calibrate ? &map_pt : NULL);
-    visualize("Viewer", queue_rs, queue_pt, intrinsics, modality_flags, sync_flags, capture_elapsed, extrinsics, find_pattern_flags, pattern_size);
+    visualize("Viewer", queue_rs, queue_pt, sync_flags, capture_elapsed, pattern_size, find_pattern_flags, R, T);
     cv::destroyWindow("Viewer");
 
     if (verbosity > 1) 

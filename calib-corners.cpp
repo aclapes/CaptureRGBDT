@@ -116,7 +116,8 @@ int main(int argc, char * argv[]) try
     std::ifstream dir_list_reader;
     dir_list_reader.open(input_list_file_str);
     if (!dir_list_reader.is_open())
-    {
+    {   
+        std::cerr << "Calibration file (input-list-file argument) not found." << std::endl;
         return EXIT_FAILURE;
     }
     else
@@ -166,7 +167,7 @@ int main(int argc, char * argv[]) try
     for (it = sequences.begin(), i = 0; it != sequences.end(); it++, i++)
     {
         if (verbose > 0) 
-            std::cout << "Processing (" << i + 1 << "/" << sequences.size() << "). " << std::endl;
+            std::cout << "Processing (" << i + 1 << "/" << sequences.size() << "): " << it->first << std::endl;
         
         std::vector<cv::Mat> corners_aux;
         std::vector<int> fids;

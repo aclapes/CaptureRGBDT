@@ -607,7 +607,7 @@ int main(int argc, char * argv[]) try
                                     pattern_size_1, pattern_size_2, 
                                     corners_row_1_aligned, corners_row_2_aligned, pattern_size_tmp);
 
-          assert (pattern_size_tmp.width == pattern_size.width && pattern_size_tmp.height == pattern_size.height);
+        //   assert (pattern_size_tmp.width == pattern_size.width && pattern_size_tmp.height == pattern_size.height);
           pattern_size = pattern_size_tmp;
 
           // Compose the images, text, and interactions with the viewer
@@ -712,6 +712,12 @@ int main(int argc, char * argv[]) try
     intrinsics_fs_1.release();
     intrinsics_fs_2.release();
 
+    // for (int i = 0; i < corners_selection_1.rows; i++)
+    // {
+    //     cv::undistortPoints(corners_selection_1.row(i), corners_selection_1.row(i), camera_matrix_1, dist_coeffs_1, cv::Mat(), camera_matrix_1);
+    //     cv::undistortPoints(corners_selection_2.row(i), corners_selection_2.row(i), camera_matrix_2, dist_coeffs_2, cv::Mat(), camera_matrix_);
+    // }
+
     std::vector<std::vector<cv::Point2f> > image_points_1, image_points_2;
     uls::mat_to_vecvec<cv::Point2f>(corners_selection_1, image_points_1);
     uls::mat_to_vecvec<cv::Point2f>(corners_selection_2, image_points_2);
@@ -719,19 +725,20 @@ int main(int argc, char * argv[]) try
     std::vector<std::vector<cv::Point3f> > object_points (1);
     uls::calcBoardCornerPositions(pattern_size, 0.05f, 0.05f, object_points[0]);
     object_points.resize(image_points_1.size(), object_points[0]);
-
+    cv::Mat dist_coeffs = cv::Mat::zeros(8, 1, CV_64F);
     // Perform extrinsic calibration
 
     cv::Mat R, T, E, F;
-    int flags = CV_CALIB_USE_INTRINSIC_GUESS + 
-                CV_CALIB_FIX_ASPECT_RATIO + 
-                CV_CALIB_FIX_FOCAL_LENGTH + 
-                CV_CALIB_FIX_K1 + 
-                CV_CALIB_FIX_K2 + 
-                CV_CALIB_FIX_K3 + 
-                CV_CALIB_FIX_K4 +
-                CV_CALIB_FIX_K5 + 
-                CV_CALIB_FIX_K6;// + CV_CALIB_TILTED_MODEL;
+    // int flags = CV_CALIB_USE_INTRINSIC_GUESS + 
+    //             CV_CALIB_FIX_ASPECT_RATIO + 
+    //             CV_CALIB_FIX_FOCAL_LENGTH + 
+    //             CV_CALIB_FIX_K1 + 
+    //             CV_CALIB_FIX_K2 + 
+    //             CV_CALIB_FIX_K3 + 
+    //             CV_CALIB_FIX_K4 +
+    //             CV_CALIB_FIX_K5 + 
+    //             CV_CALIB_FIX_K6;// + CV_CALIB_TILTED_MODEL;
+    int flags = CV_CALIB_FIX_INTRINSIC;
 
     double rms = cv::stereoCalibrate(object_points,
                                      image_points_1, image_points_2, 
@@ -740,92 +747,9 @@ int main(int argc, char * argv[]) try
                                      cv::Size(1280, 720+abs(y_shift_1)),
                                      R, T, E, F,
                                      flags,
-                                     cv::TermCriteria(cv::TermCriteria::MAX_ITER+cv::TermCriteria::EPS, 30, 1e-1));
+                                     cv::TermCriteria(cv::TermCriteria::MAX_ITER+cv::TermCriteria::EPS, 60, 1e-6));
 
     std::cout << rms << std::endl;
-
-    // Rectification
-
-    T.at<double>(1,0) = 0; // assume both cameras are completely horizontal in the stereo rig by removing offset along y-axis (rectification can compensate)
-
-    cv::Mat R1,R2,P1,P2,Q;
-    cv::stereoRectify(camera_matrix_1, dist_coeffs_1, camera_matrix_2, dist_coeffs_2, cv::Size(1280,720+abs(y_shift_1)), R, T, R1, R2, P1, P2, Q, 0);//, cv::Size(1.2*1280,1.2*(720+abs(y_shift_1))), &r1, &r2);
-    cv::Mat R1z,R2z,P1z,P2z,Qz;
-    cv::stereoRectify(camera_matrix_1, dist_coeffs_1, camera_matrix_2, dist_coeffs_2, cv::Size(1280,720+abs(y_shift_2)), R, T, R1z, R2z, P1z, P2z, Qz, cv::CALIB_ZERO_DISPARITY);
-
-    //
-    // Find inverse mappings that are used to convert original images to calibrated ones (using cv::remap). Three versions based on:
-    //
-    // (1) Only intrinsics
-    // (2) Intrinsics + Extrinsics (disparity: alignmed in the covered pattern space)
-    // (3) Intrinsics + Extrinsics (zero disparity: alignment at infinity)
-
-    cv::Mat imapx_1, imapy_1, imapx_2, imapy_2;
-    cv::initUndistortRectifyMap(camera_matrix_1, dist_coeffs_1, cv::Mat(), cv::Mat(), cv::Size(1280,720+abs(y_shift_1)), CV_32FC1, imapx_1, imapy_1);
-    cv::initUndistortRectifyMap(camera_matrix_2, dist_coeffs_2, cv::Mat(), cv::Mat(), cv::Size(1280,720+abs(y_shift_2)), CV_32FC1, imapx_2, imapy_2);
-    
-    cv::Mat mapx_1, mapy_1, mapx_2, mapy_2;
-    cv::initUndistortRectifyMap(camera_matrix_1, dist_coeffs_1, R1, P1, cv::Size(1280,720+abs(y_shift_1)), CV_32FC1, mapx_1, mapy_1);
-    cv::initUndistortRectifyMap(camera_matrix_2, dist_coeffs_2, R2, P2, cv::Size(1280,720+abs(y_shift_2)), CV_32FC1, mapx_2, mapy_2);
-
-    cv::Mat mapxz_1, mapyz_1, mapxz_2, mapyz_2;
-    cv::initUndistortRectifyMap(camera_matrix_1, dist_coeffs_1, R1z, P1z, cv::Size(1280,720+abs(y_shift_1)), CV_32FC1, mapxz_1, mapyz_1);
-    cv::initUndistortRectifyMap(camera_matrix_2, dist_coeffs_2, R2z, P2z, cv::Size(1280,720+abs(y_shift_2)), CV_32FC1, mapxz_2, mapyz_2);
-
-    // Visualize calibrations
-
-    int grid_x = 3;
-    int grid_y = 2;
-
-    for (int i = 0; i < frames_all_1.size(); i++)
-    {
-        cv::Mat img_1 = uls::ColorFrame(fs::path(frames_all_1[i]), cv::Size(1280,720), y_shift_1).mat();
-        cv::Mat img_2 = uls::ThermalFrame(fs::path(frames_all_2[i]), cv::Size(1280,720), y_shift_2).mat();
-    
-        std::vector<cv::Mat> tiling (grid_x * grid_y);
-        cv::cvtColor(img_1, tiling[0], cv::COLOR_GRAY2BGR);
-        cv::cvtColor(img_2, tiling[1], cv::COLOR_GRAY2BGR);
-        cv::multiply(tiling[0], cv::Scalar(0,0,1), tiling[0]);
-        cv::multiply(tiling[1], cv::Scalar(0,1,0), tiling[1]);
-        cv::addWeighted(tiling[0], 1, tiling[1], 1, 0.0, tiling[2]);
-    
-        cv::Mat tmp_1, tmp_2, tmp_r;
-
-        cv::remap(img_1, tmp_1, imapx_1, imapy_1, cv::INTER_LINEAR);
-        cv::remap(img_2, tmp_2, imapx_2, imapy_2, cv::INTER_LINEAR);
-        cv::cvtColor(tmp_1, tmp_1, cv::COLOR_GRAY2BGR);
-        cv::cvtColor(tmp_2, tmp_2, cv::COLOR_GRAY2BGR);
-        cv::multiply(tmp_1, cv::Scalar(0,0,1), tmp_1);
-        cv::multiply(tmp_2, cv::Scalar(0,1,0), tmp_2);
-        cv::addWeighted(tmp_1, 1, tmp_2, 1, 0.0, tiling[3]);
-
-        cv::remap(img_1, tmp_1, mapx_1, mapy_1, cv::INTER_LINEAR);
-        cv::remap(img_2, tmp_2, mapx_2, mapy_2, cv::INTER_LINEAR);
-        cv::cvtColor(tmp_1, tmp_1, cv::COLOR_GRAY2BGR);
-        cv::cvtColor(tmp_2, tmp_2, cv::COLOR_GRAY2BGR);
-        cv::multiply(tmp_1, cv::Scalar(0,0,1), tmp_1);
-        cv::multiply(tmp_2, cv::Scalar(0,1,0), tmp_2);
-        cv::addWeighted(tmp_1, 1, tmp_2, 1, 0.0, tmp_r);
-        if (!vflip) tiling[4] = tmp_r;
-        else cv::flip(tmp_r, tiling[4], 0);
-
-        cv::remap(img_1, tmp_1, mapxz_1, mapyz_1, cv::INTER_LINEAR);
-        cv::remap(img_2, tmp_2, mapxz_2, mapyz_2, cv::INTER_LINEAR);
-        cv::cvtColor(tmp_1, tmp_1, cv::COLOR_GRAY2BGR);
-        cv::cvtColor(tmp_2, tmp_2, cv::COLOR_GRAY2BGR);
-        cv::multiply(tmp_1, cv::Scalar(0,0,1), tmp_1);
-        cv::multiply(tmp_2, cv::Scalar(0,1,0), tmp_2);
-        cv::addWeighted(tmp_1, 1, tmp_2, 1, 0.0, tmp_r);
-        if (!vflip) tiling[5] = tmp_r;
-        else cv::flip(tmp_r, tiling[5], 0);
-
-        cv::Mat viewer_img;
-        uls::tile(tiling, 1920, 640, grid_x, grid_y, viewer_img);
-        cv::imshow("Viewer", viewer_img);
-        char ret = cv::waitKey(33); 
-        if (ret == 13)
-          break;
-    }
 
     if (!vm["output-parameters"].as<std::string>().empty())
     {
@@ -834,28 +758,134 @@ int main(int argc, char * argv[]) try
         extrinsics_fs << "modality-1" << modality_1;
         extrinsics_fs << "modality-2" << modality_2;
 
-        extrinsics_fs << "imapx-1" << imapx_1;
-        extrinsics_fs << "imapy-1" << imapy_1;
-        extrinsics_fs << "imapx-2" << imapx_2;
-        extrinsics_fs << "imapy-2" << imapy_2;
+        extrinsics_fs << "camera_matrix_1" << camera_matrix_1;
+        extrinsics_fs << "camera_matrix_2" << camera_matrix_2;
+        extrinsics_fs << "dist_coeffs_1" << dist_coeffs_1;
+        extrinsics_fs << "dist_coeffs_2" << dist_coeffs_2;
 
-        extrinsics_fs << "mapx-1" << mapx_1;
-        extrinsics_fs << "mapy-1" << mapy_1;
-        extrinsics_fs << "mapx-2" << mapx_2;
-        extrinsics_fs << "mapy-2" << mapy_2;
+        extrinsics_fs << "R" << R;
+        extrinsics_fs << "T" << T;
+        extrinsics_fs << "E" << E;
+        extrinsics_fs << "F" << F;
 
-        extrinsics_fs << "mapxz-1" << mapxz_1;
-        extrinsics_fs << "mapyz-1" << mapyz_1;
-        extrinsics_fs << "mapxz-2" << mapxz_2;
-        extrinsics_fs << "mapyz-2" << mapyz_2;
-
-        extrinsics_fs << "frame_size" << cv::Size(1280, 720);
-        extrinsics_fs << "y-shift-1" << y_shift_1;
-        extrinsics_fs << "y-shift-2" << y_shift_2;
-        extrinsics_fs << "vflip" << vflip;
+        extrinsics_fs << "flags" << flags;
+        extrinsics_fs << "rms" << rms;
 
         extrinsics_fs.release();
     }
+
+    // Rectification
+
+    // T.at<double>(1,0) = 0; // assume both cameras are completely horizontal in the stereo rig by removing offset along y-axis (rectification can compensate)
+
+    // cv::Mat R1,R2,P1,P2,Q;
+    // cv::stereoRectify(camera_matrix_1, dist_coeffs_1, camera_matrix_2, dist_coeffs_2, cv::Size(1280,720+abs(y_shift_1)), R, T, R1, R2, P1, P2, Q, 0);//, cv::Size(1.2*1280,1.2*(720+abs(y_shift_1))), &r1, &r2);
+    // cv::Mat R1z,R2z,P1z,P2z,Qz;
+    // cv::stereoRectify(camera_matrix_1, dist_coeffs_1, camera_matrix_2, dist_coeffs_2, cv::Size(1280,720+abs(y_shift_2)), R, T, R1z, R2z, P1z, P2z, Qz, cv::CALIB_ZERO_DISPARITY);
+
+    // //
+    // // Find inverse mappings that are used to convert original images to calibrated ones (using cv::remap). Three versions based on:
+    // //
+    // // (1) Only intrinsics
+    // // (2) Intrinsics + Extrinsics (disparity: alignmed in the covered pattern space)
+    // // (3) Intrinsics + Extrinsics (zero disparity: alignment at infinity)
+
+    // cv::Mat imapx_1, imapy_1, imapx_2, imapy_2;
+    // cv::initUndistortRectifyMap(camera_matrix_1, dist_coeffs_1, cv::Mat(), cv::Mat(), cv::Size(1280,720+abs(y_shift_1)), CV_32FC1, imapx_1, imapy_1);
+    // cv::initUndistortRectifyMap(camera_matrix_2, dist_coeffs_2, cv::Mat(), cv::Mat(), cv::Size(1280,720+abs(y_shift_2)), CV_32FC1, imapx_2, imapy_2);
+    
+    // cv::Mat mapx_1, mapy_1, mapx_2, mapy_2;
+    // cv::initUndistortRectifyMap(camera_matrix_1, dist_coeffs_1, R1, P1, cv::Size(1280,720+abs(y_shift_1)), CV_32FC1, mapx_1, mapy_1);
+    // cv::initUndistortRectifyMap(camera_matrix_2, dist_coeffs_2, R2, P2, cv::Size(1280,720+abs(y_shift_2)), CV_32FC1, mapx_2, mapy_2);
+
+    // cv::Mat mapxz_1, mapyz_1, mapxz_2, mapyz_2;
+    // cv::initUndistortRectifyMap(camera_matrix_1, dist_coeffs_1, R1z, P1z, cv::Size(1280,720+abs(y_shift_1)), CV_32FC1, mapxz_1, mapyz_1);
+    // cv::initUndistortRectifyMap(camera_matrix_2, dist_coeffs_2, R2z, P2z, cv::Size(1280,720+abs(y_shift_2)), CV_32FC1, mapxz_2, mapyz_2);
+
+    // // Visualize calibrations
+
+    // int grid_x = 3;
+    // int grid_y = 2;
+
+    // for (int i = 0; i < frames_all_1.size(); i++)
+    // {
+    //     cv::Mat img_1 = uls::ColorFrame(fs::path(frames_all_1[i]), cv::Size(1280,720), y_shift_1).mat();
+    //     cv::Mat img_2 = uls::ThermalFrame(fs::path(frames_all_2[i]), cv::Size(1280,720), y_shift_2).mat();
+    
+    //     std::vector<cv::Mat> tiling (grid_x * grid_y);
+    //     cv::cvtColor(img_1, tiling[0], cv::COLOR_GRAY2BGR);
+    //     cv::cvtColor(img_2, tiling[1], cv::COLOR_GRAY2BGR);
+    //     cv::multiply(tiling[0], cv::Scalar(0,0,1), tiling[0]);
+    //     cv::multiply(tiling[1], cv::Scalar(0,1,0), tiling[1]);
+    //     cv::addWeighted(tiling[0], 1, tiling[1], 1, 0.0, tiling[2]);
+    
+    //     cv::Mat tmp_1, tmp_2, tmp_r;
+
+    //     cv::remap(img_1, tmp_1, imapx_1, imapy_1, cv::INTER_LINEAR);
+    //     cv::remap(img_2, tmp_2, imapx_2, imapy_2, cv::INTER_LINEAR);
+    //     cv::cvtColor(tmp_1, tmp_1, cv::COLOR_GRAY2BGR);
+    //     cv::cvtColor(tmp_2, tmp_2, cv::COLOR_GRAY2BGR);
+    //     cv::multiply(tmp_1, cv::Scalar(0,0,1), tmp_1);
+    //     cv::multiply(tmp_2, cv::Scalar(0,1,0), tmp_2);
+    //     cv::addWeighted(tmp_1, 1, tmp_2, 1, 0.0, tiling[3]);
+
+    //     cv::remap(img_1, tmp_1, mapx_1, mapy_1, cv::INTER_LINEAR);
+    //     cv::remap(img_2, tmp_2, mapx_2, mapy_2, cv::INTER_LINEAR);
+    //     cv::cvtColor(tmp_1, tmp_1, cv::COLOR_GRAY2BGR);
+    //     cv::cvtColor(tmp_2, tmp_2, cv::COLOR_GRAY2BGR);
+    //     cv::multiply(tmp_1, cv::Scalar(0,0,1), tmp_1);
+    //     cv::multiply(tmp_2, cv::Scalar(0,1,0), tmp_2);
+    //     cv::addWeighted(tmp_1, 1, tmp_2, 1, 0.0, tmp_r);
+    //     if (!vflip) tiling[4] = tmp_r;
+    //     else cv::flip(tmp_r, tiling[4], 0);
+
+    //     cv::remap(img_1, tmp_1, mapxz_1, mapyz_1, cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(127,127,127));
+    //     cv::remap(img_2, tmp_2, mapxz_2, mapyz_2, cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(127,127,127));
+    //     cv::cvtColor(tmp_1, tmp_1, cv::COLOR_GRAY2BGR);
+    //     cv::cvtColor(tmp_2, tmp_2, cv::COLOR_GRAY2BGR);
+    //     cv::multiply(tmp_1, cv::Scalar(0,0,1), tmp_1);
+    //     cv::multiply(tmp_2, cv::Scalar(0,1,0), tmp_2);
+    //     cv::addWeighted(tmp_1, 1, tmp_2, 1, 0.0, tmp_r);
+    //     if (!vflip) tiling[5] = tmp_r;
+    //     else cv::flip(tmp_r, tiling[5], 0);
+
+    //     cv::Mat viewer_img;
+    //     uls::tile(tiling, 1920, 640, grid_x, grid_y, viewer_img);
+    //     cv::imshow("Viewer", viewer_img);
+    //     char ret = cv::waitKey(33); 
+    //     if (ret == 13)
+    //       break;
+    // }
+
+    // if (!vm["output-parameters"].as<std::string>().empty())
+    // {
+    //     extrinsics_fs.open(vm["output-parameters"].as<std::string>(), cv::FileStorage::WRITE);
+
+    //     extrinsics_fs << "modality-1" << modality_1;
+    //     extrinsics_fs << "modality-2" << modality_2;
+
+    //     extrinsics_fs << "imapx-1" << imapx_1;
+    //     extrinsics_fs << "imapy-1" << imapy_1;
+    //     extrinsics_fs << "imapx-2" << imapx_2;
+    //     extrinsics_fs << "imapy-2" << imapy_2;
+
+    //     extrinsics_fs << "mapx-1" << mapx_1;
+    //     extrinsics_fs << "mapy-1" << mapy_1;
+    //     extrinsics_fs << "mapx-2" << mapx_2;
+    //     extrinsics_fs << "mapy-2" << mapy_2;
+
+    //     extrinsics_fs << "mapxz-1" << mapxz_1;
+    //     extrinsics_fs << "mapyz-1" << mapyz_1;
+    //     extrinsics_fs << "mapxz-2" << mapxz_2;
+    //     extrinsics_fs << "mapyz-2" << mapyz_2;
+
+    //     extrinsics_fs << "frame_size" << cv::Size(1280, 720);
+    //     extrinsics_fs << "y-shift-1" << y_shift_1;
+    //     extrinsics_fs << "y-shift-2" << y_shift_2;
+    //     extrinsics_fs << "vflip" << vflip;
+
+    //     extrinsics_fs.release();
+    // }
 
     return SUCCESS;
 }
