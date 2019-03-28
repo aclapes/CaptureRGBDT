@@ -50,6 +50,8 @@ typedef struct
     std::atomic<bool> capture {true};
     std::atomic<bool> save_started {false};
     std::atomic<bool> save_suspended {true};
+    std::chrono::duration<double,std::milli> capture_elapsed;
+    std::chrono::duration<double,std::milli> save_elapsed;
 } sync_flags_t;
 
 
@@ -708,7 +710,7 @@ void visualize(std::string win_name,
                std::map<std::string, intrinsics_t> intrinsics,
                int modality_flags,
                sync_flags_t & sync_flags, 
-               std::chrono::duration<double,std::milli> & capture_elapsed,
+            //    std::chrono::duration<double,std::milli> & capture_elapsed,
                std::shared_ptr<extrinsics_t> extrinsics = NULL,
                int find_pattern_flags = 0,
                cv::Size pattern_size = cv::Size(6,5)
@@ -855,7 +857,7 @@ void visualize(std::string win_name,
             tiling = (sync_flags.save_started && !sync_flags.save_suspended) ? tiling : ~tiling;
 
             std::stringstream ss;
-            ss << capture_elapsed.count(); 
+            ss << sync_flags.capture_elapsed.count(); 
             cv::putText(tiling, ss.str(), cv::Point(tiling.cols/20.0,tiling.rows/20.0), CV_FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(0,0,255), 1, 8, false);
 
             cv::imshow(win_name, tiling);
@@ -1161,10 +1163,10 @@ int main(int argc, char * argv[]) try
     // Open visualization window
     cv::namedWindow("Viewer");
     std::chrono::duration<double,std::milli> capture_elapsed, saving_elapsed;
-    std::thread save_start_timer(timer, 3000, std::ref(sync_flags.save_started), std::ref(saving_elapsed));
-    std::thread capture_timer(timer, 3000 + vm["duration"].as<int>(), std::ref(sync_flags.capture), std::ref(capture_elapsed)); // Timer will set is_capturing=false when finished
+    std::thread save_start_timer(timer, 3000, std::ref(sync_flags.save_started), std::ref(sync_flags.save_elapsed));
+    std::thread capture_timer(timer, 3000 + vm["duration"].as<int>(), std::ref(sync_flags.capture), std::ref(sync_flags.capture_elapsed)); // Timer will set is_capturing=false when finished
     // visualize("Viewer", queue_rs, queue_pt, sync_flags, capture_elapsed, pattern_size, find_pattern_flags, calibrate ? &map_rs : NULL, calibrate ? &map_pt : NULL);
-    visualize("Viewer", queue_rs, queue_pt, intrinsics, modality_flags, sync_flags, capture_elapsed, extrinsics, find_pattern_flags, pattern_size);
+    visualize("Viewer", queue_rs, queue_pt, intrinsics, modality_flags, sync_flags, extrinsics, find_pattern_flags, pattern_size);
     cv::destroyWindow("Viewer");
 
     if (verbosity > 1) 
