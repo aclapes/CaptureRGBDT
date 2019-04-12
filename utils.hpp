@@ -127,6 +127,11 @@ namespace uls
                 return falseColorsMap;
             }
 
+            cv::Mat to_8bit(int colorMap = cv::COLORMAP_AUTUMN)
+            {
+                return to_8bit(img, colorMap);
+            }
+
             template<typename T>
             static cv::Mat cut_at(cv::Mat src, float max_z, float min_z = 0, T val = 0)
             {
@@ -710,6 +715,7 @@ namespace uls
     void align_to_depth(cv::Mat depth, 
                     cv::Mat K_depth,
                     cv::Mat K_other,
+                    float depth_scale,
                     std::shared_ptr<extrinsics_t> extrinsics,
                     cv::Mat & map_x, 
                     cv::Mat & map_y)
@@ -734,7 +740,7 @@ namespace uls
         {
             for (int j = 0; j < depth.cols; j++)
             {
-                z = depth.at<float>(i,j);
+                z = depth_scale * depth.at<unsigned short>(i,j);
                 if (z > 0)
                 {
                     x = (j - cx_d) * z / fx_d;

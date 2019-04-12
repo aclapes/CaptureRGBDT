@@ -2,6 +2,7 @@
 #include <iostream>
 #include <opencv2/core/utils/logger.defines.hpp>
 #include <opencv2/core/utils/logger.hpp>
+#include "utils.hpp"
 
 void align_pattern_corners(cv::Mat a, cv::Mat b, cv::Size pattern_a, cv::Size pattern_b, cv::Mat & aa, cv::Mat & bb)
 {
@@ -76,7 +77,16 @@ void transform_point_domains(cv::Mat points_1, cv::Mat points_2, cv::Size dom_1,
 // }
 
 int main(int argc, char * argv[])
-{    
+{   
+    std::string p ("/home/aclapes/Code/c++/getting-started/data-2.9/2019-04-11_21.51.57/rs/depth/d_00002316.png");
+    uls::DepthFrame df (p);
+    cv::Mat m = cv::imread(p, cv::IMREAD_UNCHANGED);
+    double minVal, maxVal;
+    int minIdx, maxIdx;
+    cv::minMaxIdx(m, &minVal, &maxVal, &minIdx, &maxIdx);
+    std::cout << minVal << ',' << maxVal << std::endl;
+    cv::imshow("Viewer", df.mat());
+    cv::waitKey();
     // int max_cols = 1280;
     // int max_rows = 720;
     // cv::Size frame_size (640, 480);
@@ -91,30 +101,30 @@ int main(int argc, char * argv[])
     //                             7, 0, 0, 1, 4,
     //                             1, 4, 1, 4, 4);
 
-    cv::Mat A = (cv::Mat_<float>(3,3) <<  8, 8, 8,
-                                1, 0, 2,
-                                8, 1, 2);
-    cv::Mat B = (cv::Mat_<float>(3,3) <<  8, 8, 8,
-                                1, 0, 2,
-                                8, 1, 2);
+    // cv::Mat A = (cv::Mat_<float>(3,3) <<  8, 8, 8,
+    //                             1, 0, 2,
+    //                             8, 1, 2);
+    // cv::Mat B = (cv::Mat_<float>(3,3) <<  8, 8, 8,
+    //                             1, 0, 2,
+    //                             8, 1, 2);
     
-    cv::Mat C;
-    C = A * B;
+    // cv::Mat C;
+    // C = A * B;
     
-    cv::Mat a (1, 2, CV_32FC2);
-    a.at<cv::Point2f>(0,0) = cv::Point2f(0,0);
-    a.at<cv::Point2f>(0,1) = cv::Point2f(1280,720);
-    std::cout << a <<std::endl;
+    // cv::Mat a (1, 2, CV_32FC2);
+    // a.at<cv::Point2f>(0,0) = cv::Point2f(0,0);
+    // a.at<cv::Point2f>(0,1) = cv::Point2f(1280,720);
+    // std::cout << a <<std::endl;
 
-    cv::Mat b (1, 2, CV_32FC2);
-    b.at<cv::Point2f>(0,0) = cv::Point2f(0,0);
-    b.at<cv::Point2f>(0,1) = cv::Point2f(1440,480);
-    std::cout << b <<std::endl;
+    // cv::Mat b (1, 2, CV_32FC2);
+    // b.at<cv::Point2f>(0,0) = cv::Point2f(0,0);
+    // b.at<cv::Point2f>(0,1) = cv::Point2f(1440,480);
+    // std::cout << b <<std::endl;
 
-    cv::Mat a_transf, b_transf;
-    transform_point_domains(a, b, cv::Size(1280,720), cv::Size(1440,480), a_transf, b_transf);
-    std::cout << a_transf << std::endl;
-    std::cout << b_transf << std::endl;
+    // cv::Mat a_transf, b_transf;
+    // transform_point_domains(a, b, cv::Size(1280,720), cv::Size(1440,480), a_transf, b_transf);
+    // std::cout << a_transf << std::endl;
+    // std::cout << b_transf << std::endl;
     // a = a.reshape(1, 1);
     // b = b.reshape(1, 1);
     // align_pattern_corners(b,a, cv::Size(3,3), cv::Size(5,5), bb, aa);

@@ -69,6 +69,8 @@ typedef struct
 } pt_frame_t;
 
 
+bool visualize_rgb = false;
+
 //
 // FUNCTIONS
 //
@@ -164,14 +166,14 @@ std::string current_time_and_date()
 void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, SafeQueue<rs_frame_t> & q, synchronization_t & sync, int modality_flags, bool verbose)
 {
     rs2_stream align_to;
-    float depth_scale;
+    // float depth_scale;
     rs2::align* p_align = NULL;
 
     if (modality_flags & USE_DEPTH)
     {
         align_to = find_stream_to_align(profile.get_streams());
         p_align = new rs2::align(align_to);
-        depth_scale = get_depth_scale(profile.get_device());
+        // depth_scale = get_depth_scale(profile.get_device());
     }
     
     /*
@@ -188,16 +190,16 @@ void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, Sa
         
         if (((modality_flags & USE_COLOR) | (modality_flags & USE_DEPTH)) == (USE_COLOR | USE_DEPTH)) 
         {
-           if (profile_changed(pipe.get_active_profile().get_streams(), profile.get_streams()))
-            {
-                // If the profile was changed, update the align object, and also get the new device's depth scale
-                profile = pipe.get_active_profile();
-                align_to = find_stream_to_align(profile.get_streams());
-                if (p_align != NULL) 
-                    delete p_align;
-                p_align = new rs2::align(align_to);
-                depth_scale = get_depth_scale(profile.get_device());
-            }
+            //    if (profile_changed(pipe.get_active_profile().get_streams(), profile.get_streams()))
+            //     {a
+            //         // If the profile was changed, update the align object, and also get the new device's depth scale
+            //         profile = pipe.get_active_profile();
+            //         align_to = find_stream_to_align(profile.get_streams());
+            //         if (p_align != NULL) 
+            //             delete p_align;
+            //         p_align = new rs2::align(align_to);
+            //         // depth_scale = get_depth_scale(profile.get_device());
+            //     }
 
             // Get processed aligned frame
             rs2::frameset processed = p_align->process(frames);
@@ -215,8 +217,9 @@ void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, Sa
                                   CV_16U, 
                                   const_cast<void *>(aligned_depth_frame.get_data()), 
                                   cv::Mat::AUTO_STEP);
-            img_d.convertTo(img_d, CV_32F);
-            frame.img_d = img_d * depth_scale;
+            // img_d.convertTo(img_d, CV_32F);
+            // frame.img_d = img_d * depth_scale;
+            frame.img_d = img_d.clone();
         }
         else if (modality_flags & USE_COLOR)
         {
@@ -243,8 +246,9 @@ void produce_realsense(rs2::pipeline & pipe, rs2::pipeline_profile & profile, Sa
                                   CV_16U, 
                                   const_cast<void *>(depth_frame.get_data()), 
                                   cv::Mat::AUTO_STEP);
-            img_d.convertTo(img_d, CV_32F);
-            frame.img_d = img_d * depth_scale;
+            // img_d.convertTo(img_d, CV_32F);
+            // frame.img_d = img_d * depth_scale;
+            frame.img_d = img_d.clone();
         }
 
         q.enqueue( frame );
@@ -307,8 +311,8 @@ void consume_realsense(SafeQueue<rs_frame_t> & q,
     boost::format fmt("%08d");
     std::ofstream outfile;
 
-    if (!dir.empty())
-        outfile.open((dir / "rs.log").string(), std::ios_base::app);
+    // if (!dir.empty())
+        // outfile.open((dir / "rs.log").string(), std::ios_base::app);
 
     // auto start = std::chrono::steady_clock::now();
     // cv::Mat capture_img_prev;
@@ -338,8 +342,10 @@ void consume_realsense(SafeQueue<rs_frame_t> & q,
         {
             long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(capture.ts.time_since_epoch()).count();
             fmt % fid;
+            outfile.open((dir / "rs.log").string(), std::ios_base::app);
             outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
-        
+            outfile.close();
+
             fs::path color_dir = dir / "rs/color/";
             fs::path depth_dir = dir / "rs/depth/";
             if (!capture.img_c.empty())
@@ -377,8 +383,8 @@ void consume_purethermal(SafeQueue<pt_frame_t> & q,
     boost::format fmt("%08d");
     std::ofstream outfile;
     
-    if (!dir.empty())
-        outfile.open((dir / "pt.log").string(), std::ios_base::app);
+    // if (!dir.empty())
+        // outfile.open((dir / "pt.log").string(), std::ios_base::app);
     
     auto start = std::chrono::steady_clock::now();
     cv::Mat capture_img_prev;
@@ -413,7 +419,9 @@ void consume_purethermal(SafeQueue<pt_frame_t> & q,
             {
                 long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(capture.ts.time_since_epoch()).count();
                 fmt % fid;
+                outfile.open((dir / "pt.log").string(), std::ios_base::app);
                 outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
+                outfile.close();
                 
                 fs::path thermal_dir = dir / "pt/thermal/";
                 cv::imwrite((thermal_dir / ("t_" + fmt.str() + ".png")).string(), capture.img, compression_params);
@@ -505,9 +513,10 @@ void find_and_draw_chessboard(cv::Mat & img, cv::Size pattern_size, int flags = 
 void visualize(std::string win_name,
                SafeQueue<rs_frame_t> & queue_rs, 
                SafeQueue<pt_frame_t> & queue_pt, 
-               std::map<std::string, uls::intrinsics_t> intrinsics,
                int modality_flags,
                synchronization_t & sync, 
+               float depth_scale = 1.0,
+               std::shared_ptr<std::map<std::string, uls::intrinsics_t> > intrinsics = NULL,
                std::shared_ptr<uls::extrinsics_t> extrinsics = NULL,
                int find_pattern_flags = 0,
                cv::Size pattern_size = cv::Size(6,5)
@@ -515,7 +524,7 @@ void visualize(std::string win_name,
 {
     bool use_depth = (modality_flags & USE_DEPTH) > 0;
 
-    std::vector<cv::Mat> frames (3);
+    std::vector<cv::Mat> frames (visualize_rgb ? 3 : 2);
 
     while (sync.capture)
     {
@@ -526,28 +535,36 @@ void visualize(std::string win_name,
         try 
         {
             rs_frame = queue_rs.peek(33);
-            if (!rs_frame.img_c.empty())
+            if (!rs_frame.img_c.empty() && visualize_rgb)
             {
-                cv::Mat color (rs_frame.img_c.size(), rs_frame.img_c.type());
-                cv::undistort(rs_frame.img_c, color, intrinsics["Color"].camera_matrix, intrinsics["Color"].dist_coeffs);
+                cv::Mat color;
+
+                if (intrinsics)
+                {
+                    color.create(rs_frame.img_c.size(), rs_frame.img_c.type());
+                    cv::undistort(rs_frame.img_c, color, (*intrinsics)["Color"].camera_matrix, (*intrinsics)["Color"].dist_coeffs);
+                }
+                else
+                    color = rs_frame.img_c.clone();
 
                 if (find_pattern_flags & FIND_PATTERN_ON_COLOR) 
                     find_and_draw_chessboard(color, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE/* + cv::CALIB_CB_FAST_CHECK + cv::CALIB_CB_FAST_CHECK*/);
 
-                frames[0] = color;
+                frames[2] = color;
             }
 
             if (!rs_frame.img_d.empty())
             {
-                // depth = uls::DepthFrame::cut_at<float>(rs_frame.img_d.clone(), 4000, 0.f);
-                depth.create(rs_frame.img_d.size(), rs_frame.img_d.type());
-
-                if (rs_frame.img_c.empty()) // rs's intrinsics are computed from color stream -> undistort depth if aligned to color
-                    cv::undistort(rs_frame.img_d, depth, intrinsics["Color"].camera_matrix, intrinsics["Color"].dist_coeffs);
+                if (intrinsics)
+                {
+                    depth.create(rs_frame.img_d.size(), rs_frame.img_d.type());
+                    cv::undistort(rs_frame.img_d, depth, (*intrinsics)["Color"].camera_matrix, (*intrinsics)["Color"].dist_coeffs);
+                }
                 else
-                    depth = rs_frame.img_d;
+                    depth = rs_frame.img_d.clone();
 
-                frames[1] = uls::DepthFrame::to_8bit(depth, cv::COLORMAP_BONE);
+
+                frames[0] = uls::DepthFrame::to_8bit(depth, cv::COLORMAP_BONE);
             }
         }
         catch (const std::runtime_error & e) // catch peek's exception
@@ -555,8 +572,8 @@ void visualize(std::string win_name,
             std::cout << e.what() << '\n';
         }
         
-        if ( !use_depth || (extrinsics && use_depth && !depth.empty()) )
-        {
+        // if ( !use_depth || (extrinsics && use_depth && !depth.empty()) )
+        // {
             try
             {
                 pt_frame = queue_pt.peek(33);
@@ -565,13 +582,16 @@ void visualize(std::string win_name,
                     cv::Mat therm = uls::ThermalFrame::to_8bit(pt_frame.img.clone());
                     uls::resize(therm, therm, cv::Size(1280,720));
 
-                    cv::Mat tmp = therm.clone();
-                    cv::undistort(tmp, therm, intrinsics["Thermal"].camera_matrix, intrinsics["Thermal"].dist_coeffs);
+                    if (intrinsics)
+                    {
+                        cv::Mat tmp = therm.clone();
+                        cv::undistort(tmp, therm, (*intrinsics)["Thermal"].camera_matrix, (*intrinsics)["Thermal"].dist_coeffs);
+                    }
 
                     if (extrinsics && use_depth && !depth.empty())
                     {
                         cv::Mat map_x, map_y;
-                        align_to_depth(depth, intrinsics["Color"].camera_matrix, intrinsics["Thermal"].camera_matrix, extrinsics, map_x, map_y);
+                        align_to_depth(depth, (*intrinsics)["Color"].camera_matrix, (*intrinsics)["Thermal"].camera_matrix, depth_scale, extrinsics, map_x, map_y);
                         cv::remap(therm, therm, map_x, map_y, cv::INTER_LINEAR, cv::BORDER_CONSTANT, 0);
                     }
                     
@@ -581,17 +601,17 @@ void visualize(std::string win_name,
                         find_and_draw_chessboard(therm, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE);
                     }
 
-                    frames[2] = therm;
+                    frames[1] = therm;
                 }
             }
             catch (const std::runtime_error & e) // catch peek's exception
             {
                 std::cerr << e.what() << '\n';
             }
-        }
+        // }
 
         cv::Mat tiling;
-        uls::tile(frames, 534, 900, 1, frames.size(), tiling);
+        uls::tile(frames, 640, 720, 1, frames.size(), tiling);
     
         tiling = (sync.save_started && !sync.save_suspended) ? tiling : ~tiling;
 
@@ -741,7 +761,7 @@ int main(int argc, char * argv[]) try
     }
 
     // bool calibrate = false;
-    std::map<std::string,uls::intrinsics_t> intrinsics;
+    std::shared_ptr<std::map<std::string,uls::intrinsics_t> > intrinsics;
     std::shared_ptr<uls::extrinsics_t> extrinsics;
     if (!vm["calibration-params"].as<std::string>().empty())
     {
@@ -752,10 +772,11 @@ int main(int argc, char * argv[]) try
             fs["modality-1"] >> modality_1;
             fs["modality-2"] >> modality_2;
            
-            fs["camera_matrix_1"] >> intrinsics[modality_1].camera_matrix;
-            fs["camera_matrix_2"] >> intrinsics[modality_2].camera_matrix;
-            fs["dist_coeffs_1"]   >> intrinsics[modality_1].dist_coeffs;
-            fs["dist_coeffs_2"]   >> intrinsics[modality_2].dist_coeffs;
+            intrinsics = std::make_shared<std::map<std::string,uls::intrinsics_t> >();
+            fs["camera_matrix_1"] >> (*intrinsics)[modality_1].camera_matrix;
+            fs["camera_matrix_2"] >> (*intrinsics)[modality_2].camera_matrix;
+            fs["dist_coeffs_1"]   >> (*intrinsics)[modality_1].dist_coeffs;
+            fs["dist_coeffs_2"]   >> (*intrinsics)[modality_2].dist_coeffs;
 
             extrinsics = std::make_shared<uls::extrinsics_t>();
             fs["R"] >> extrinsics->R;
@@ -780,8 +801,12 @@ int main(int argc, char * argv[]) try
     if (modality_flags & USE_DEPTH) 
         cfg_rs.enable_stream(RS2_STREAM_DEPTH, 1280, 720, RS2_FORMAT_Z16, vm["fps"].as<int>());
     
+    float depth_scale = 1.0;
     if (modality_flags & (USE_COLOR | USE_DEPTH))
+    {
         profile = pipe_rs.start(cfg_rs);
+        if (modality_flags & USE_DEPTH) depth_scale = get_depth_scale(profile.get_device());
+    }
 
     // PureThermal pipeline (config and start)
     pt::pipeline pipe_pt;
@@ -852,7 +877,7 @@ int main(int argc, char * argv[]) try
     std::thread save_start_timer(timer, 3000, std::ref(sync.save_started), std::ref(sync.save_elapsed));
     std::thread capture_timer(timer, 3000 + vm["duration"].as<int>(), std::ref(sync.capture), std::ref(sync.capture_elapsed)); // Timer will set is_capturing=false when finished
     // visualize("Viewer", queue_rs, queue_pt, sync, capture_elapsed, pattern_size, find_pattern_flags, calibrate ? &map_rs : NULL, calibrate ? &map_pt : NULL);
-    visualize("Viewer", queue_rs, queue_pt, intrinsics, modality_flags, sync, extrinsics, find_pattern_flags, pattern_size);
+    visualize("Viewer", queue_rs, queue_pt, modality_flags, sync, depth_scale, intrinsics, extrinsics, find_pattern_flags, pattern_size);
     cv::destroyWindow("Viewer");
 
     if (verbosity > 1) 
