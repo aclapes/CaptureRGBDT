@@ -13,7 +13,7 @@
 #include <boost/format.hpp>
 #include <boost/program_options.hpp>
 
-#include "utils.hpp"
+#include "utils/common.hpp"
 
 bool debug = true;
 
@@ -77,7 +77,7 @@ int main(int argc, char * argv[]) try
 {
     /* -------------------------------- */
     /*   Command line argument parsing  */
-    /* -------------------------------- */
+    /* --------------   ------------------ */
     
     std::string input_dir_str;
 

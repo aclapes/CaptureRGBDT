@@ -17,10 +17,11 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/timer.hpp>
 
-#include "pt_pipeline.hpp"
-#include "safe_queue.hpp"
-#include "utils.hpp"
-#include "detection.hpp"
+#include "src/pt_pipeline.hpp"
+#include "src/safe_queue.hpp"
+#include "src/utils/common.hpp"
+#include "src/utils/calibration.hpp"
+#include "src/utils/detection.hpp"
 
 namespace po = boost::program_options;
 namespace fs = boost::filesystem;
