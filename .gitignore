@@ -1,7 +1,11 @@
 *.yml
 
+bin/*
+!bin/.gitignore
+
 data/*
 !data/.gitignore
+
 .vscode/
 build/
 build_*/

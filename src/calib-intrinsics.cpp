@@ -16,7 +16,7 @@
 #include <boost/progress.hpp>
 #include <boost/algorithm/string.hpp>
 
-#include "utils.hpp"
+#include "utils/common.hpp"
 
 bool debug = true;
 
@@ -178,14 +178,18 @@ int main(int argc, char * argv[]) try
     int y_shift;
     corners_fs["y-shift"] >> y_shift;
 
+    std::string modality;
+    corners_fs["modality"] >> modality;
+
     while (keep_selecting)
     {
         std::cout << k << ":" << ptr[k]+1 << "/" << indices[k].size() << std::endl;
         int idx = indices[k][ptr[k]];//indices_k.at<int>(i,0);
         cv::Mat img;
-        if (corners_fs["modality"] == "Color")
+        std::string modality;
+        if (modality == "Color")
             img = uls::ColorFrame(fs::path(frames_all[idx]), frame_size, y_shift).mat();
-        else if (corners_fs["modality"] == "Thermal") 
+        else if (modality == "Thermal") 
             img = uls::ThermalFrame(fs::path(frames_all[idx]), frame_size, y_shift).mat();
 
         cv::Mat corners_aux = corners_all.row(idx).reshape(2, pattern_size.width * pattern_size.height);
@@ -197,7 +201,7 @@ int main(int argc, char * argv[]) try
         else
             ss << "[ " << k << " ]";
         ss << ' ' << ptr[k] << '/' << indices[k].size(); 
-        cv::putText(img, ss.str(), cv::Point(frame_size.width/20.0,frame_size.height/10.0), CV_FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(0,0,255), 1, 8, false);
+        cv::putText(img, ss.str(), cv::Point(frame_size.width/20.0,frame_size.height/10.0), cv::FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(0,0,255), 1, 8, false);
         cv::imshow("Viewer", img);
 
         char ret = cv::waitKey();
@@ -277,9 +281,9 @@ int main(int argc, char * argv[]) try
     for (std::string frame_path : frames_all)
     {
         cv::Mat img;
-        if (corners_fs["modality"] == "Color")
+        if (modality == "Color")
             img = uls::ColorFrame(fs::path(frame_path), frame_size, y_shift).mat();
-        else if (corners_fs["modality"] == "Thermal")
+        else if (modality == "Thermal")
             img = uls::ThermalFrame(fs::path(frame_path), frame_size, y_shift).mat();
 
         cv::Mat tmp = img.clone();

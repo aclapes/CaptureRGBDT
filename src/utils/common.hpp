@@ -5,8 +5,8 @@
 //  Created by Albert Clapés on 27/11/2018.
 //
 
-#ifndef utils_h
-#define utils_h
+#ifndef utils_common_h
+#define utils_common_h
 
 #include <opencv2/opencv.hpp>
 #include <boost/filesystem.hpp>
@@ -58,7 +58,7 @@ namespace uls
         public:
             ThermalFrame(fs::path path, cv::Size s = cv::Size(), int y_shift = 0)
             {
-                img = cv::imread(path.string(), CV_LOAD_IMAGE_UNCHANGED);
+                img = cv::imread(path.string(), cv::IMREAD_UNCHANGED);
                 img = ThermalFrame::to_8bit(img);
                 resize(img, img, s);
                 if (y_shift > 0)
@@ -93,7 +93,7 @@ namespace uls
         public:
             DepthFrame(fs::path path, cv::Size s = cv::Size(), int y_shift = 0)
             {
-                img = cv::imread(path.string(), CV_LOAD_IMAGE_UNCHANGED);
+                img = cv::imread(path.string(), cv::IMREAD_UNCHANGED);
                 resize(img, img, s);
                 if (y_shift > 0)
                     cv::copyMakeBorder(img, img, 0, y_shift, 0, 0, cv::BORDER_CONSTANT);
@@ -151,7 +151,7 @@ namespace uls
         public:
             ColorFrame(fs::path path, cv::Size s = cv::Size(), int y_shift = 0)
             {
-                img = cv::imread(path.string(), CV_LOAD_IMAGE_UNCHANGED);
+                img = cv::imread(path.string(), cv::IMREAD_UNCHANGED);
                 cv::cvtColor(img, img, cv::COLOR_BGR2GRAY);
                 resize(img, img, s);
                 if (y_shift > 0)
@@ -377,7 +377,7 @@ namespace uls
         cv::Mat corners_ref = corners_2d_reference_positions(pattern_size);
 
         cv::Mat mask;
-        cv::Mat h = cv::findHomography(corners, corners_ref, mask, CV_RANSAC);
+        cv::Mat h = cv::findHomography(corners, corners_ref, mask, cv::RANSAC);
 
         cv::Mat corners_transf;
         cv::perspectiveTransform(corners, corners_transf, h);
@@ -450,14 +450,14 @@ namespace uls
             
             if (chessboard_found) 
             {
-                cornerSubPix(img, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
+                cornerSubPix(img, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 1e-1));
                 tracking_enabled = true;
             }
             else if (tracking_enabled)
             {
                 cv::Mat status, err;
                 cv::calcOpticalFlowPyrLK(img_prev, img, corners_prev, corners, status, err, cv::Size(7,7));
-                cornerSubPix(img, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
+                cornerSubPix(img, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 1e-1));
                 // error checking
                 if ( ! check_corners_integrity(status, pattern_size) )
                 {

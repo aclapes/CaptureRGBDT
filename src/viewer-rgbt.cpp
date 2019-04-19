@@ -136,9 +136,9 @@ int main(int argc, char * argv[]) try
         uls::Timestamp pt_ts = log_synced[i].second;
 
         // read frames
-        cv::Mat c = cv::imread(fs::path(color_path / fs::path("c_" + rs_ts.id + ".jpg")).string(), CV_LOAD_IMAGE_UNCHANGED);
-        cv::Mat d = cv::imread(fs::path(depth_path / fs::path("d_" + rs_ts.id + ".png")).string(), CV_LOAD_IMAGE_UNCHANGED);
-        cv::Mat t = cv::imread(fs::path(therm_path / fs::path("t_" + pt_ts.id + ".png")).string(), CV_LOAD_IMAGE_UNCHANGED);
+        cv::Mat c = cv::imread(fs::path(color_path / fs::path("c_" + rs_ts.id + ".jpg")).string(), cv::IMREAD_UNCHANGED);
+        cv::Mat d = cv::imread(fs::path(depth_path / fs::path("d_" + rs_ts.id + ".png")).string(), cv::IMREAD_UNCHANGED);
+        cv::Mat t = cv::imread(fs::path(therm_path / fs::path("t_" + pt_ts.id + ".png")).string(), cv::IMREAD_UNCHANGED);
 
         // preprocess frames
         d = uls::DepthFrame::to_8bit(d, cv::COLORMAP_JET);

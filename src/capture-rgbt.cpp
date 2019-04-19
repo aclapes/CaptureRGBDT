@@ -596,7 +596,7 @@ void visualize(std::string win_name,
 
         std::stringstream ss;
         ss << (sync.capture_elapsed - sync.save_elapsed).count(); 
-        cv::putText(tiling, ss.str(), cv::Point(tiling.cols/20.0,tiling.rows/20.0), CV_FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(0,0,255), 1, 8, false);
+        cv::putText(tiling, ss.str(), cv::Point(tiling.cols/20.0,tiling.rows/20.0), cv::FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(0,0,255), 1, 8, false);
 
         cv::imshow(win_name, tiling);
         cv::waitKey(1);

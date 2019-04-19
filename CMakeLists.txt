@@ -92,4 +92,3 @@ add_subdirectory(src)
 #     RUNTIME DESTINATION
 #     ${CMAKE_INSTALL_PREFIX}/bin
 # )
-
