@@ -39,6 +39,28 @@ namespace uls
         cy = K.at<double>(1,2);
     }
 
+    /*
+    * Performs chessboard detection on an image given a pattern_size and draws it on top of the image.
+    * 
+    * @param img Image where to find the chessboard corners
+    * @param pattern_size Size of the chessboard pattern
+    * @flags Pattern detection flags (see cv::findChessboardCorners's "flags" parameter values)
+    * @return
+    */
+    void find_and_draw_chessboard(cv::Mat & img, cv::Size pattern_size, int flags = 0)
+    {
+        cv::Mat gray;
+        cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+
+        cv::Mat corners;
+        bool found = cv::findChessboardCorners(gray, pattern_size, corners, flags);
+        
+        if (img.type() != CV_8UC3)
+            cv::cvtColor(img, img, cv::COLOR_GRAY2BGR);
+
+        cv::drawChessboardCorners(img, pattern_size, corners, found);
+    }
+
     void align_to_depth(cv::Mat depth, 
                         cv::Mat K_depth,
                         cv::Mat K_other,

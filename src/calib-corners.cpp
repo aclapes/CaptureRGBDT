@@ -11,12 +11,13 @@
 #include <iomanip> // put_time
 #include <string>  // string
 #include <boost/format.hpp>
+#include <boost/iterator.hpp>
 #include <boost/foreach.hpp>
 #include <boost/program_options.hpp>
 #include <boost/progress.hpp>
 #include <boost/algorithm/string.hpp>
 
-#include "utils.hpp"
+#include "utils/common.hpp"
 
 bool debug = true;
 
@@ -113,19 +114,29 @@ int main(int argc, char * argv[]) try
     
     std::vector<std::string> sequence_dirs;
 
-    std::ifstream dir_list_reader;
-    dir_list_reader.open(input_list_file_str);
-    if (!dir_list_reader.is_open())
-    {   
-        std::cerr << "Calibration file (input-list-file argument) not found." << std::endl;
-        return EXIT_FAILURE;
+    fs::path input_p (input_list_file_str);
+    if (fs::is_directory(input_p))
+    {
+        for(auto& entry : boost::make_iterator_range(fs::directory_iterator(input_p), {}))
+            sequence_dirs.push_back(entry.path().string());
     }
     else
     {
-        std::string line;
-        while (std::getline(dir_list_reader, line))
-            sequence_dirs.push_back(line);
-        dir_list_reader.close();
+        std::ifstream dir_list_reader;
+        dir_list_reader.open(input_list_file_str);
+        if (dir_list_reader.is_open())
+        {
+            std::string line;
+            while (std::getline(dir_list_reader, line))
+                sequence_dirs.push_back(line);
+            dir_list_reader.close();
+        }
+    }
+    
+    if (sequence_dirs.empty())
+    {
+        std::cerr << "Calibration file (input-list-file argument) not found." << std::endl;
+        return EXIT_FAILURE;
     }
     
     // fs::path input_dir (vm["input-dir"].as<std::string>());

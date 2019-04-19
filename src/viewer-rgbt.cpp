@@ -85,6 +85,7 @@ int main(int argc, char * argv[]) try
     desc.add_options()
         ("help,h", "Print help messages")
         ("fps,f", po::value<float>()->default_value(0.f), "Acquisition speed (fps) of realsense (integer number 1~30)")
+        ("calibration-params", po::value<std::string>()->default_value(""), "Calibration mapping parameters")
         ("input-dir", po::value<std::string>(&input_dir_str)->required(), "Input directory containing rs/pt frames and timestamp files");
     
     po::positional_options_description positional_options; 

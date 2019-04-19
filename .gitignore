@@ -1,3 +1,5 @@
+*.yml
+
 data/*
 !data/.gitignore
 .vscode/
