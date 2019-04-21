@@ -464,6 +464,11 @@ int main(int argc, char * argv[]) try
     corners_fs_1["y-shift"] >> y_shift_1;
     corners_fs_2["y-shift"] >> y_shift_2;
 
+    cv::Size square_size_1, square_size_2;
+    corners_fs_1["square_size"] >> square_size_1;
+    corners_fs_2["square_size"] >> square_size_2;
+    assert(square_size_1.width == square_size_2.width && square_size_1.height == square_size_2.height);
+
     // Read frames and corners
 
     std::vector<std::string> frames_all_1, frames_all_2;
@@ -723,7 +728,7 @@ int main(int argc, char * argv[]) try
     uls::mat_to_vecvec<cv::Point2f>(corners_selection_2, image_points_2);
 
     std::vector<std::vector<cv::Point3f> > object_points (1);
-    uls::calcBoardCornerPositions(pattern_size, 0.05f, 0.05f, object_points[0]);
+    uls::calcBoardCornerPositions(pattern_size, square_size_1.width, square_size_1.height, object_points[0]);
     object_points.resize(image_points_1.size(), object_points[0]);
     cv::Mat dist_coeffs = cv::Mat::zeros(8, 1, CV_64F);
     // Perform extrinsic calibration

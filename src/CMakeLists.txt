@@ -8,7 +8,6 @@
 # elseif(COMPILER_SUPPORTS_CXX0X)
 #     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -pthread")
 # endif()
-find_package(OpenCV REQUIRED)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/")
 
@@ -19,6 +18,10 @@ target_link_libraries(capture-rgbt PRIVATE ${LIBUVC_FOUND} ${REALSENSE2_FOUND} $
 add_executable(viewer-rgbt viewer-rgbt.cpp)
 include_directories(viewer-rgbt ${ADDITIONAL_INCLUDE_DIRS})
 target_link_libraries(viewer-rgbt PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
+
+add_executable(calib-corners calib-corners.cpp)
+include_directories(calib-corners ${ADDITIONAL_INCLUDE_DIRS})
+target_link_libraries(calib-corners PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
 
 add_executable(calib-intrinsics calib-intrinsics.cpp)
 include_directories(calib-intrinsics ${ADDITIONAL_INCLUDE_DIRS})
@@ -31,9 +34,4 @@ target_link_libraries(calib-extrinsics PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS}
 # add_executable(test_chessboard_detection test_chessboard_detection.cpp utils.hpp)
 # include_directories(test_chessboard_detection ${ADDITIONAL_INCLUDE_DIRS})
 # target_link_libraries(test_chessboard_detection PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
-
-add_executable(calib-corners calib-corners.cpp) # utils.hpp)
-include_directories(calib-corners ${ADDITIONAL_INCLUDE_DIRS})
-target_link_libraries(calib-corners PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
-# set_target_properties(calib-corners PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 

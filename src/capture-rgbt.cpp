@@ -70,7 +70,7 @@ typedef struct
 } pt_frame_t;
 
 
-bool visualize_rgb = true;
+bool visualize_rgb = false;
 
 //
 // FUNCTIONS
@@ -319,7 +319,7 @@ void consume_realsense(SafeQueue<rs_frame_t> & q,
     // cv::Mat capture_img_prev;
     
 
-    while (sync.capture || q.size() > 0)
+    while (sync.capture) // || q.size() > 0)
     {
         rs_frame_t capture = q.dequeue();
         if (verbose)
@@ -390,7 +390,7 @@ void consume_purethermal(SafeQueue<pt_frame_t> & q,
     auto start = std::chrono::steady_clock::now();
     cv::Mat capture_img_prev;
 
-    while (sync.capture || q.size() > 0)
+    while (sync.capture) // || q.size() > 0)
     {
         pt_frame_t capture = q.dequeue();
         if (verbose)
@@ -474,6 +474,28 @@ void countdown(int total, int warn_every, bool verbose = true)
 }
 
 /*
+ * Performs chessboard detection on an image given a pattern_size and draws it on top of the image.
+ * 
+ * @param img Image where to find the chessboard corners
+ * @param pattern_size Size of the chessboard pattern
+ * @flags Pattern detection flags (see cv::findChessboardCorners's "flags" parameter values)
+ * @return
+ */
+void find_and_draw_chessboard(cv::Mat & img, cv::Size pattern_size, int flags = 0)
+{
+    cv::Mat gray;
+    cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+
+    cv::Mat corners;
+    bool found = cv::findChessboardCorners(gray, pattern_size, corners, flags);
+    
+    if (img.type() != CV_8UC3)
+        cv::cvtColor(img, img, cv::COLOR_GRAY2BGR);
+
+    cv::drawChessboardCorners(img, pattern_size, corners, found);
+}
+
+/*
  * Peeks and visualizes frames from RS and PT safe-queues.
  * 
  * TODO: write extended description
@@ -527,7 +549,7 @@ void visualize(std::string win_name,
                     color = rs_frame.img_c.clone();
 
                 if (find_pattern_flags & FIND_PATTERN_ON_COLOR) 
-                    uls::find_and_draw_chessboard(color, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE/* + cv::CALIB_CB_FAST_CHECK + cv::CALIB_CB_FAST_CHECK*/);
+                    find_and_draw_chessboard(color, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE/* + cv::CALIB_CB_FAST_CHECK + cv::CALIB_CB_FAST_CHECK*/);
 
                 frames[2] = color;
             }
@@ -577,7 +599,7 @@ void visualize(std::string win_name,
                     if (find_pattern_flags & FIND_PATTERN_ON_THERM)
                     {
                         cv::cvtColor(therm, therm, cv::COLOR_GRAY2BGR);
-                        uls::find_and_draw_chessboard(therm, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE);
+                        find_and_draw_chessboard(therm, pattern_size, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE);
                     }
 
                     frames[1] = therm;
@@ -623,6 +645,7 @@ int main(int argc, char * argv[]) try
         ("find-pattern-on,F", po::value<std::string>()->implicit_value(""), "Comma-separated list of modalities to find pattern on (color and/or thermal)")
         ("pattern,p", po::value<std::string>()->default_value("8,7"), "Pattern size \"x,y\" squares")
         ("fps,f", po::value<int>()->default_value(30), "Acquisition speed (fps) of realsense (integer number 1~30)")
+        ("calibration-params", po::value<std::string>()->default_value(""), "Calibration mapping parameters")
         ("md-duration", po::value<int>(), "When movement detected record during X millisecs")
         ("md-pixel-thresh", po::value<int>()->default_value(30), "When movement detected record during X millisecs")
         ("md-frame-ratio", po::value<float>()->default_value(0.01), "When movement detected record during X millisecs")

@@ -569,7 +569,7 @@ namespace uls
         _transform_point_domain(points_2, dom_2, dom_transf, points_2_transf);
     }
 
-    void time_sync(std::vector<Timestamp> log_a, std::vector<Timestamp> log_b, std::vector<std::pair<Timestamp,Timestamp> > & log_synced, int64_t eps = 50, bool verbose = true)
+    void time_sync(std::vector<Timestamp> log_a, std::vector<Timestamp> log_b, std::vector<std::pair<Timestamp,Timestamp> > & log_synced, int64_t eps = 200, bool verbose = true)
     {
         std::vector<Timestamp> master;
         std::vector<Timestamp> slave;

@@ -82,6 +82,7 @@ int main(int argc, char * argv[]) try
         // ("verbose,v", po::bool_switch(&verbose), "Verbosity")
         // ("input-dir-list", po::value<std::string>(&input_dir_list_str)->required(), "File containing list of calibration sequence directories")
         // ("prefixes", po::value<std::string>(&prefixes_str)->required(), "Prefixes");
+        ("square-size,q", po::value<std::string>()->default_value("0.05,0.05"), "Square size in meters")
         ("intrinsics-file", po::value<std::string>()->default_value(""), "Intrinsics")
         ("nb-clusters,k", po::value<int>()->default_value(50), "Number of k-means clusters")
         ("input-corners-file", po::value<std::string>(&corners_file)->required(), "Input corners file");
@@ -152,6 +153,16 @@ int main(int argc, char * argv[]) try
     // cv::Mat fids (K, 1, CV_32SC1);
     // fids.setTo(-1);
 
+    std::vector<std::string> square_size_aux;
+    boost::split(square_size_aux, vm["square-size"].as<std::string>(), boost::is_any_of(","));
+
+    assert(square_size_aux.size() == 1 || square_size_aux.size() == 2);
+    float square_width  = std::stof(square_size_aux[0]);
+    float square_height = std::stof(square_size_aux[square_size_aux.size()-1]); // obscure hack
+
+    assert(square_width > 0 && square_height > 0);
+    cv::Point2f square_size (square_width, square_height);
+
     cv::Size frame_size;
     corners_fs["resize_dims"] >> frame_size;
 
@@ -186,7 +197,6 @@ int main(int argc, char * argv[]) try
         std::cout << k << ":" << ptr[k]+1 << "/" << indices[k].size() << std::endl;
         int idx = indices[k][ptr[k]];//indices_k.at<int>(i,0);
         cv::Mat img;
-        std::string modality;
         if (modality == "Color")
             img = uls::ColorFrame(fs::path(frames_all[idx]), frame_size, y_shift).mat();
         else if (modality == "Thermal") 
@@ -257,7 +267,7 @@ int main(int argc, char * argv[]) try
     uls::mat_to_vecvec<cv::Point2f>(corners_selection.reshape(2, corners_selection.rows), image_points);
 
     std::vector<std::vector<cv::Point3f> > object_points (1);
-    uls::calcBoardCornerPositions(pattern_size, 0.08f, 0.075f, object_points[0]);
+    uls::calcBoardCornerPositions(pattern_size, square_size.x, square_size.y, object_points[0]);
     object_points.resize(image_points.size(), object_points[0]);
 
     double rms = cv::calibrateCamera(object_points, image_points, frame_size, camera_matrix, dist_coeffs, rvecs, tvecs);
@@ -274,6 +284,7 @@ int main(int argc, char * argv[]) try
         fstorage_out << "rms" << rms;
         fstorage_out << "resize_dims" << frame_size;
         fstorage_out << "pattern_size" << pattern_size;
+        fstorage_out << "square_size" << square_size;
         fstorage_out << "y-shift" << y_shift;
         fstorage_out.release();
     }
