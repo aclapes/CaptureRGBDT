@@ -464,11 +464,6 @@ int main(int argc, char * argv[]) try
     corners_fs_1["y-shift"] >> y_shift_1;
     corners_fs_2["y-shift"] >> y_shift_2;
 
-    cv::Size square_size_1, square_size_2;
-    corners_fs_1["square_size"] >> square_size_1;
-    corners_fs_2["square_size"] >> square_size_2;
-    assert(square_size_1.width == square_size_2.width && square_size_1.height == square_size_2.height);
-
     // Read frames and corners
 
     std::vector<std::string> frames_all_1, frames_all_2;
@@ -709,13 +704,19 @@ int main(int argc, char * argv[]) try
 
     cv::Mat camera_matrix_1, camera_matrix_2;
     cv::Mat dist_coeffs_1, dist_coeffs_2;
+    cv::Point2f square_size_1, square_size_2;
+    
     intrinsics_fs_1["camera_matrix"] >> camera_matrix_1;
     intrinsics_fs_2["camera_matrix"] >> camera_matrix_2;
     intrinsics_fs_1["dist_coeffs"] >> dist_coeffs_1;
     intrinsics_fs_2["dist_coeffs"] >> dist_coeffs_2;
+    intrinsics_fs_1["square_size"] >> square_size_1;
+    intrinsics_fs_2["square_size"] >> square_size_2;
 
     intrinsics_fs_1.release();
     intrinsics_fs_2.release();
+
+    assert(square_size_1.x == square_size_2.x && square_size_1.y == square_size_2.y);
 
     // for (int i = 0; i < corners_selection_1.rows; i++)
     // {
@@ -728,7 +729,7 @@ int main(int argc, char * argv[]) try
     uls::mat_to_vecvec<cv::Point2f>(corners_selection_2, image_points_2);
 
     std::vector<std::vector<cv::Point3f> > object_points (1);
-    uls::calcBoardCornerPositions(pattern_size, square_size_1.width, square_size_1.height, object_points[0]);
+    uls::calcBoardCornerPositions(pattern_size, square_size_1.x, square_size_1.y, object_points[0]);
     object_points.resize(image_points_1.size(), object_points[0]);
     cv::Mat dist_coeffs = cv::Mat::zeros(8, 1, CV_64F);
     // Perform extrinsic calibration
@@ -752,7 +753,7 @@ int main(int argc, char * argv[]) try
                                      cv::Size(1280, 720+abs(y_shift_1)),
                                      R, T, E, F,
                                      flags,
-                                     cv::TermCriteria(cv::TermCriteria::MAX_ITER+cv::TermCriteria::EPS, 60, 1e-6));
+                                     cv::TermCriteria(cv::TermCriteria::MAX_ITER+cv::TermCriteria::EPS, 100, 1e-5));
 
     std::cout << rms << std::endl;
 

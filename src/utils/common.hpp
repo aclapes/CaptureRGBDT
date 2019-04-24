@@ -569,11 +569,11 @@ namespace uls
         _transform_point_domain(points_2, dom_2, dom_transf, points_2_transf);
     }
 
-    void time_sync(std::vector<Timestamp> log_a, std::vector<Timestamp> log_b, std::vector<std::pair<Timestamp,Timestamp> > & log_synced, int64_t eps = 200, bool verbose = true)
+    void time_sync(std::vector<Timestamp> log_a, std::vector<Timestamp> log_b, std::vector<std::pair<Timestamp,Timestamp> > & log_synced, int64_t eps = 50, bool verbose = true)
     {
         std::vector<Timestamp> master;
-        std::vector<Timestamp> slave;
-        if (log_a.size() > log_b.size())
+        std::vector<Timestamp> slave; 
+        if (log_a.size() < log_b.size())
         {
             master = log_a;
             slave  = log_b;
@@ -589,20 +589,20 @@ namespace uls
         for (int i = 0; i < master.size(); i++) 
         {
             Timestamp ts_m = master[i];
-            std::vector<std::pair<Timestamp, int64_t> > matches;
+            std::vector<std::pair<int, int64_t> > matches;
             while (j < slave.size() && slave[j].time < ts_m.time + eps)
             {
                 int64_t dist = abs(ts_m.time - slave[j].time);
                 if (dist < eps)
                 {
-                    matches.push_back( std::pair<Timestamp,int64_t>(slave[j], dist) );
+                    matches.push_back( std::pair<int,int64_t>(j, dist) );
                 }
                 j++;
             }
 
             if (!matches.empty())
             {
-                std::pair<Timestamp, int64_t> m_best = matches[0];
+                std::pair<int, int64_t> m_best = matches[0];
                 for (int k = 1; k < matches.size(); k++)
                 {
                     if (matches[k].second < m_best.second)
@@ -610,10 +610,13 @@ namespace uls
                 }
 
                 std::pair<Timestamp,Timestamp> synced_pair;
-                synced_pair.first  = log_a.size() > log_b.size() ? master[i] : m_best.first;
-                synced_pair.second = log_a.size() > log_b.size() ? m_best.first : master[i];
+                synced_pair.first  = log_a.size() < log_b.size() ? master[i] : slave[m_best.first];
+                synced_pair.second = log_a.size() < log_b.size() ? slave[m_best.first] : master[i];
                 log_synced.push_back(synced_pair);
+
+                j = m_best.first + 1;
             }
+
             // elif fill_with_previous:
             //     all_matches.append( ((i, ts_m), all_matches[-1][1]) ), ts_m in enumerate(master)
         }
@@ -623,12 +626,16 @@ namespace uls
         //     std::cout << log.first.time << "," << log.second.time << '\n';
         // }
 
+        float dif_total = 0;
         if (verbose)
         {
             for (int i = 0; i < log_synced.size(); i++)
             {
-                std::cout << log_synced[i].first.time << "," << log_synced[i].second.time << '\n';
+                int64_t dif = log_synced[i].first.time - log_synced[i].second.time;
+                std::cout << log_synced[i].first.time << ',' << log_synced[i].second.time << ',' << dif << '\n';
+                dif_total += std::abs(dif);
             }
+            std::cout << dif_total / log_synced.size() << std::endl;
         }
     }
 

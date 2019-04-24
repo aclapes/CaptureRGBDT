@@ -737,30 +737,6 @@ int main(int argc, char * argv[]) try
 
     cv::Size pattern_size (x,y);
 
-    /*
-     * Create output directory structures to store captured data
-     */
-
-    std::string date_and_time = current_time_and_date();
-
-    fs::path parent (vm["output-dir"].as<std::string>());
-    if (!parent.empty())
-    {
-        if (verbosity > 1) 
-            std::cout << "[Main] Creating output directory structure ...\n";
-
-        parent = parent / fs::path(date_and_time);
-        if (modality_flags & USE_COLOR) 
-            boost::filesystem::create_directories(parent / fs::path("rs/color/"));
-        if (modality_flags & USE_DEPTH) 
-            boost::filesystem::create_directories(parent / fs::path("rs/depth/"));
-        if (modality_flags & USE_THERM) 
-            boost::filesystem::create_directories(parent / fs::path("pt/thermal/"));
-
-        if (verbosity > 1) 
-            std::cout << "[Main] Output directory structure \"" << parent.string() << "\"created\n";
-    }
-
     // bool calibrate = false;
     std::shared_ptr<std::map<std::string,uls::intrinsics_t> > intrinsics;
     std::shared_ptr<uls::extrinsics_t> extrinsics;
@@ -782,7 +758,6 @@ int main(int argc, char * argv[]) try
             extrinsics = std::make_shared<uls::extrinsics_t>();
             fs["R"] >> extrinsics->R;
             fs["T"] >> extrinsics->T;
-            // calibrate = true;
         }
     }
 
@@ -802,7 +777,7 @@ int main(int argc, char * argv[]) try
     if (modality_flags & USE_DEPTH) 
         cfg_rs.enable_stream(RS2_STREAM_DEPTH, 1280, 720, RS2_FORMAT_Z16, vm["fps"].as<int>());
     
-    float depth_scale = 1.0;
+    float depth_scale = 1e-3;
     if (modality_flags & (USE_COLOR | USE_DEPTH))
     {
         profile = pipe_rs.start(cfg_rs);
@@ -822,6 +797,49 @@ int main(int argc, char * argv[]) try
 
     // Countdown
     countdown<std::chrono::seconds>(2, 1, verbosity > 3); // sleep for 3 second and print a message every 1 second
+
+    /*
+     * Create output directory structures to store captured data
+     */
+
+    std::string date_and_time = current_time_and_date();
+
+    fs::path parent (vm["output-dir"].as<std::string>());
+    if (!parent.empty())
+    {
+        if (verbosity > 1) 
+            std::cout << "[Main] Creating output directory structure ...\n";
+
+        parent = parent / fs::path(date_and_time);
+        if (modality_flags & (USE_DEPTH | USE_COLOR) )
+        {
+            if (modality_flags & USE_COLOR) 
+                boost::filesystem::create_directories(parent / fs::path("rs/color/"));
+            else if (modality_flags & USE_DEPTH) 
+                boost::filesystem::create_directories(parent / fs::path("rs/depth/"));
+            
+            std::string serial_number = profile.get_device().get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+            std::cout << "RS SERIAL NUMBER: " << serial_number << std::endl;
+            cv::FileStorage fs ((parent / fs::path("rs_info.yml")).string(), cv::FileStorage::WRITE);
+            if (fs.isOpened())
+            {
+                fs << "serial_number" << serial_number;
+                fs << "depth_scale" << depth_scale;
+                fs.release();
+            }
+        }
+        if (modality_flags & USE_THERM) 
+            boost::filesystem::create_directories(parent / fs::path("pt/thermal/"));
+
+        if (extrinsics)
+        {
+            fs::path calibration_params_path (vm["calibration-params"].as<std::string>());
+            fs::copy_file(calibration_params_path, parent / calibration_params_path.stem());
+        }
+
+        if (verbosity > 1) 
+            std::cout << "[Main] Output directory structure \"" << parent.string() << "\"created\n";
+    }
 
     /*
      * Initialize consumer-producer queues
