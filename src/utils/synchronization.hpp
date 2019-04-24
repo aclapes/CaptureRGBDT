@@ -18,12 +18,22 @@
 
 namespace uls
 {
+    /* Struct definitions */
     struct Timestamp
     {
         std::string id;
         int64_t time;
     };
 
+    //
+    // Reading timestamp log files
+    //
+
+    /*
+     * Reads a log line.
+     * @param s A log line
+     * @param delimiter A delimiter
+     */
     std::vector<std::string> tokenize(std::string s, std::string delimiter)
     {
         std::vector<std::string> tokens;
@@ -41,7 +51,11 @@ namespace uls
         return tokens;
     }
 
-    uls::Timestamp process_log_line(std::string line)
+    /*
+     * Builds a timestamp struct from the log line
+     * @param line A log line
+     */
+    uls::Timestamp line_to_timestamp(std::string line)
     {
         std::vector<std::string> tokens = tokenize(line, ",");
 
@@ -53,6 +67,10 @@ namespace uls
         return ts;
     }
 
+    /*
+     * Reads a log file containing frame ids and corresponding capturing times and generates a vector of timestamp structs.
+     * @param log_path Path to log file
+     */
     std::vector<uls::Timestamp> read_log_file(fs::path log_path)
     {
         std::ifstream log (log_path.string());
@@ -61,7 +79,7 @@ namespace uls
         if (log.is_open()) {
             while (std::getline(log, line)) {
                 try {
-                    uls::Timestamp ts = process_log_line(line);
+                    uls::Timestamp ts = line_to_timestamp(line);
                     tokenized_lines.push_back(ts);
                 }
                 catch (std::exception & e)
@@ -75,19 +93,33 @@ namespace uls
         return tokenized_lines;
     }
 
-    void time_sync(std::vector<Timestamp> log_a, std::vector<Timestamp> log_b, std::vector<std::pair<Timestamp,Timestamp> > & log_synced, int64_t eps = 50, bool verbose = true)
+    /*
+     * Matches two series of timestamps.
+     * 
+     * Given two series of timestamps "a" and "b", it sets the shorter one as master and for each timestamp in the master looks for the
+     * closest matching timestamp in the slave series (only considered if the difference between the two is smaller than a certain threshold 
+     * value "eps".
+     * @param a First log series
+     * @param b Second log series
+     * @param ab Output log series of matching timesamp (a_i,b_j) pairs
+     * @param eps Threshold to consider a match (expressed in milliseconds)
+     * @
+     */
+    void time_sync(std::vector<Timestamp> a, 
+                   std::vector<Timestamp> b, 
+                   std::vector<std::pair<Timestamp,Timestamp> > & ab, 
+                   int64_t eps = 50,
+                   bool verbose = true)
     {
         std::vector<Timestamp> master;
         std::vector<Timestamp> slave; 
-        if (log_a.size() < log_b.size())
+        if (a.size() < b.size())
         {
-            master = log_a;
-            slave  = log_b;
-            if (verbose) std::cout << "a is master, b is slave\n";
+            master = a;
+            slave  = b;
         } else {
-            master = log_b;
-            slave  = log_a;
-            if (verbose) std::cout << "b is master, a is slave\n";
+            master = b;
+            slave  = a;
         }
 
         int j = 0;
@@ -116,93 +148,25 @@ namespace uls
                 }
 
                 std::pair<Timestamp,Timestamp> synced_pair;
-                synced_pair.first  = log_a.size() < log_b.size() ? master[i] : slave[m_best.first];
-                synced_pair.second = log_a.size() < log_b.size() ? slave[m_best.first] : master[i];
-                log_synced.push_back(synced_pair);
+                synced_pair.first  = a.size() < b.size() ? master[i] : slave[m_best.first];
+                synced_pair.second = a.size() < b.size() ? slave[m_best.first] : master[i];
+                ab.push_back(synced_pair);
 
                 j = m_best.first; //+ 1;
             }
-
-            // elif fill_with_previous:
-            //     all_matches.append( ((i, ts_m), all_matches[-1][1]) ), ts_m in enumerate(master)
         }
 
-        // for (auto log : log_synced)
-        // {
-        //     std::cout << log.first.time << "," << log.second.time << '\n';
-        // }
-
-        float dif_total = 0;
         if (verbose)
         {
-            for (int i = 0; i < log_synced.size(); i++)
+            float dif_total = 0.f;
+            for (int i = 0; i < ab.size(); i++)
             {
-                int64_t dif = log_synced[i].first.time - log_synced[i].second.time;
-                std::cout << log_synced[i].first.time << ',' << log_synced[i].second.time << ',' << dif << '\n';
+                int64_t dif = ab[i].first.time - ab[i].second.time;
+                std::cout << ab[i].first.time << ',' << ab[i].second.time << ',' << dif << '\n';
                 dif_total += std::abs(dif);
             }
-            std::cout << dif_total / log_synced.size() << std::endl;
+            std::cout << dif_total / ab.size() << std::endl;
         }
-    }
-
-    void time_sync(std::vector<Timestamp> log_a, std::vector<Timestamp> log_b, std::vector<std::pair<int,int> > & log_pairs, int64_t eps = 50, bool verbose = true)
-    {
-        log_pairs.clear();
-
-        // std::vector<std::pair<Timestamp,Timestamp> > log_synced;
-
-        std::vector<Timestamp> master;
-        std::vector<Timestamp> slave;
-        if (log_a.size() > log_b.size())
-        {
-            master = log_a;
-            slave  = log_b;
-            if (verbose) std::cout << "a is master, b is slave\n";
-        } else {
-            master = log_b;
-            slave  = log_a;
-            if (verbose) std::cout << "b is master, a is slave\n";
-        }
-
-        int j = 0;
-
-        for (int i = 0; i < master.size(); i++) 
-        {
-            Timestamp ts_m = master[i];
-            std::vector<std::pair<int, int64_t> > matches;
-            while (j < slave.size() && slave[j].time < ts_m.time + eps)
-            {
-                int64_t dist = abs(ts_m.time - slave[j].time);
-                if (dist < eps)
-                {
-                    matches.push_back( std::pair<int, int64_t>(j, dist) );
-                }
-                j++;
-            }
-
-            if (!matches.empty())
-            {
-                std::pair<int,int64_t> m_best = matches[0];
-                for (int k = 1; k < matches.size(); k++)
-                {
-                    if (matches[k].second < m_best.second)
-                        m_best = matches[k];
-                }
-                
-                std::pair<int,int> synced_pair;
-                synced_pair.first  = log_a.size() > log_b.size() ? i : m_best.first;
-                synced_pair.second = log_a.size() > log_b.size() ? m_best.first : i;
-                log_pairs.push_back(synced_pair);
-            }
-        }
-
-        // if (verbose)
-        // {
-        //     for (int i = 0; i < log_synced.size(); i++)
-        //     {
-        //         std::cout << log_synced[i].first.time << "," << log_synced[i].second.time << '\n';
-        //     }
-        // }
     }
 }
 
