@@ -18,6 +18,8 @@
 #include <math.h>
 
 #include "utils/common.hpp"
+#include "utils/calibration.hpp"
+#include "utils/synchronization.hpp"
 
 bool debug = true;
 
@@ -479,7 +481,7 @@ int main(int argc, char * argv[]) try
         std::vector<uls::Timestamp> log_1 = uls::read_log_file(fs::path(sequence_dir_1) / fs::path(corners_fs_1["log-file"]));
         std::vector<uls::Timestamp> log_2 = uls::read_log_file(fs::path(sequence_dir_2) / fs::path(corners_fs_2["log-file"]));
         std::vector<std::pair<uls::Timestamp,uls::Timestamp> > log_12;
-        uls::time_sync(log_1, log_2, log_12);
+        uls::time_sync(log_1, log_2, log_12, 50);
 
         std::vector<std::string> frames_1, frames_2;
         corners_fs_1["frames-" + std::to_string(i)] >> frames_1;

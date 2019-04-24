@@ -18,6 +18,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "utils/common.hpp"
+#include "utils/calibration.hpp"
 
 bool debug = true;
 
@@ -32,6 +33,80 @@ namespace
   const size_t FORCED_EXIT = 3;
  
 } // namespace
+
+template<typename T>
+void find_chessboard_corners(std::vector<std::string> frames, 
+                             cv::Size pattern_size, 
+                             std::vector<cv::Mat> & frames_corners,
+                             std::vector<int> & frames_inds,
+                             cv::Size resize_dims = cv::Size(),
+                             std::string prefix = "",
+                             int y_shift = 0,
+                             bool verbose = true) 
+{
+    frames_corners.clear();
+    frames_inds.clear(); 
+
+    cv::Mat img, img_prev;
+    cv::Mat corners, corners_prev;
+    float tracking_enabled = false;       
+
+    for (int i = 0; i < frames.size(); i++) 
+    {
+        /* read and preprocess frame */
+        cv::Mat img = T(fs::path(prefix) / fs::path(frames[i]), resize_dims, y_shift).mat();
+
+        corners.release();
+        // cv::GaussianBlur(fra, img, cv::Size(0, 0), 3);
+        // cv::addWeighted(fra, 1.5, img, -0.5, 0, img);
+        bool chessboard_found = findChessboardCorners(img, pattern_size, corners, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE);
+        
+        if (chessboard_found) 
+        {
+            cornerSubPix(img, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 1e-1));
+            tracking_enabled = true;
+        }
+        else if (tracking_enabled)
+        {
+            cv::Mat status, err;
+            cv::calcOpticalFlowPyrLK(img_prev, img, corners_prev, corners, status, err, cv::Size(7,7));
+            cornerSubPix(img, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 1e-1));
+            // error checking
+            if ( ! uls::check_corners_integrity(status, pattern_size) )
+            {
+                tracking_enabled = false;
+                corners.release();
+            }
+        }
+
+        if (tracking_enabled)
+        {
+            if ((corners.rows == pattern_size.width * pattern_size.height) && uls::check_corners_2d_positions(corners, pattern_size))
+            {
+                frames_corners.push_back(corners);
+                frames_inds.push_back(i);
+            }
+            else
+            {
+                corners.release();
+                tracking_enabled = false;
+            }
+        }
+
+        if (verbose)
+        {
+            cv::Mat cimg;
+            cv::cvtColor(img, cimg, cv::COLOR_GRAY2BGR);
+            if (!corners.empty()) cv::drawChessboardCorners(cimg, pattern_size, corners, chessboard_found);
+            cv::imshow("Viewer", cimg);
+            cv::waitKey(1);
+        }
+
+        img_prev = img;
+        corners_prev = corners;
+    }
+}
+
 
 int main(int argc, char * argv[]) try
 {
@@ -143,23 +218,28 @@ int main(int argc, char * argv[]) try
     std::map<std::string, std::vector<std::string> > sequences;
     for (std::string seq_dir : sequence_dirs)
     {
-        // std::vector<std::string> s = uls::list_files_in_directory(input_dir, vm["prefix"].as<std::string>(), vm["file-ext"].as<std::string>());
-        // std::sort(s.begin(), s.end());
-        std::vector<uls::Timestamp> log = uls::read_log_file(seq_dir + "/" + vm["log-file"].as<std::string>());
-        std::vector<std::string> frame_paths (log.size());
-        for (int i = 0; i < log.size(); i++)
-        {
-            uls::Timestamp ts = log[i];
-            std::string rel_path = vm["prefix"].as<std::string>() + ts.id + vm["file-ext"].as<std::string>();
-            // frame_paths[i] = seq_dir + "/" + rel_path;
-            frame_paths[i] = rel_path;
-        }
-        sequences[seq_dir] = frame_paths;
+        // Alternatives
+        // <===========
+        // (1) Requires including "utils/synchronization.hpp"
+        // std::vector<uls::Timestamp> log = uls::read_log_file(seq_dir + "/" + vm["log-file"].as<std::string>());
+        // std::vector<std::string> frame_paths (log.size());
+        // for (int i = 0; i < log.size(); i++)
+        // {
+        //     uls::Timestamp ts = log[i];
+        //     std::string rel_path = vm["prefix"].as<std::string>() + ts.id + vm["file-ext"].as<std::string>();
+        //     // frame_paths[i] = seq_dir + "/" + rel_path;
+        //     frame_paths[i] = rel_path;
+        // }
+        // ------------
+        // (2) and this does not
+        std::vector<std::string> s = uls::list_files_in_directory(seq_dir, vm["prefix"].as<std::string>(), vm["file-ext"].as<std::string>());
+        std::sort(s.begin(), s.end());
+        // ===========>
+        sequences[seq_dir] = s;
     }
 
     // std::vector<cv::Mat> sequence_corners;
     // std::vector<std::string> corner_frames;
-
 
     cv::FileStorage fstorage (vm["output-file"].as<std::string>(), cv::FileStorage::WRITE);
     fstorage << "pattern_size" << pattern_size;
@@ -183,9 +263,9 @@ int main(int argc, char * argv[]) try
         std::vector<cv::Mat> corners_aux;
         std::vector<int> fids;
         if (modality_str == "Color")
-            uls::find_chessboard_corners<uls::ColorFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, vm["y-shift"].as<int>(), verbose > 1);
+            find_chessboard_corners<uls::ColorFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, vm["y-shift"].as<int>(), verbose > 1);
         else if (modality_str == "Thermal")
-            uls::find_chessboard_corners<uls::ThermalFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, vm["y-shift"].as<int>(), verbose > 1);
+            find_chessboard_corners<uls::ThermalFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, vm["y-shift"].as<int>(), verbose > 1);
 
         assert(corners_aux.size() == fids.size());
 
