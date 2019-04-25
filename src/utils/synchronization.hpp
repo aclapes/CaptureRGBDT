@@ -1,12 +1,12 @@
 //
-//  utils.hpp
-//  RealsenseExamplesGettingStarted
+//  src/utils/synchronization.hpp
+//  Temporal synchronization of time series based on capturing time instants (expressed in milliseconds since Epoch)
 //
 //  Created by Albert Clapés on 27/11/2018.
 //
 
-#ifndef utils_synchronization_h
-#define utils_synchronization_h
+#ifndef synchronization_hpp
+#define synchronization_hpp
 
 #include <opencv2/opencv.hpp>
 #include <boost/filesystem.hpp>
@@ -18,7 +18,7 @@
 
 namespace uls
 {
-    /* Struct definitions */
+    /* Struct definitions */;
     struct Timestamp
     {
         std::string id;
@@ -170,4 +170,4 @@ namespace uls
     }
 }
 
-#endif // utils_synchronization_h
+#endif // synchronization_hpp

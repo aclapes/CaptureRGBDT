@@ -277,6 +277,16 @@ namespace uls
         }
     }
 
+    void vec_to_mat(std::vector<cv::Point2f> points, cv::Mat & m)
+    {
+        m.release();
+
+        for (cv::Point2f p : points)
+        {
+            m.push_back(p);
+        }
+    }
+
     cv::Mat mask_rows(cv::Mat src, cv::Mat mask)
     {
         cv::Mat dst (cv::countNonZero(mask), src.cols, src.type());

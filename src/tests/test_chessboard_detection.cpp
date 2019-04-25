@@ -2,7 +2,7 @@
 #include <iostream>
 #include <opencv2/core/utils/logger.defines.hpp>
 #include <opencv2/core/utils/logger.hpp>
-#include "utils.hpp"
+#include "utils/common.hpp"
 
 void align_pattern_corners(cv::Mat a, cv::Mat b, cv::Size pattern_a, cv::Size pattern_b, cv::Mat & aa, cv::Mat & bb)
 {
@@ -20,7 +20,7 @@ void align_pattern_corners(cv::Mat a, cv::Mat b, cv::Size pattern_a, cv::Size pa
 }
 
 
-void _transform_point_domain(cv::Mat src, cv::Size dom_src, cv::Size dom_dst, cv::Mat & dst)
+void _homogeneize_2d_domains(cv::Mat src, cv::Size dom_src, cv::Size dom_dst, cv::Mat & dst)
 {
     dst.release();
     dst.create(src.rows, src.cols, src.type());
@@ -54,14 +54,14 @@ void _transform_point_domain(cv::Mat src, cv::Size dom_src, cv::Size dom_dst, cv
     }
 }
 
-void transform_point_domains(cv::Mat points_1, cv::Mat points_2, cv::Size dom_1, cv::Size dom_2, cv::Mat & points_1_transf, cv::Mat & points_2_transf)
+void homogeneize_2d_domains(cv::Mat points_1, cv::Mat points_2, cv::Size dom_1, cv::Size dom_2, cv::Mat & points_1_transf, cv::Mat & points_2_transf)
 {
     points_1_transf.release();
     points_2_transf.release();
 
     cv::Size dom_merged (std::max(dom_1.width, dom_2.width), std::max(dom_1.height, dom_2.height));
-    _transform_point_domain(points_1, dom_1, dom_merged, points_1_transf);
-    _transform_point_domain(points_2, dom_2, dom_merged, points_2_transf);
+    _homogeneize_2d_domains(points_1, dom_1, dom_merged, points_1_transf);
+    _homogeneize_2d_domains(points_2, dom_2, dom_merged, points_2_transf);
 }
 
 

@@ -581,7 +581,7 @@ int main(int argc, char * argv[]) try
           // Corners were detected in a different smaller/larger image resolution? Transform point domain space
           cv::Mat corners_row_1_transf, corners_row_2_transf;
           cv::Size frame_size_transf;
-          uls::transform_point_domains(corners_all_1.row(idx), corners_all_2.row(idx), 
+          uls::homogeneize_2d_domains(corners_all_1.row(idx), corners_all_2.row(idx), 
                                       frame_size_1, frame_size_2, 
                                       corners_row_1_transf, corners_row_2_transf, frame_size_transf);
 
@@ -605,9 +605,9 @@ int main(int argc, char * argv[]) try
           // where P1.width == (P2.width - L) and P1.height ==  (P2.height - L). Get the intersection of both.
           cv::Mat corners_row_1_aligned, corners_row_2_aligned;
           cv::Size pattern_size_tmp;
-          uls::align_pattern_corners(corners_row_1_transf, corners_row_2_transf, 
-                                    pattern_size_1, pattern_size_2, 
-                                    corners_row_1_aligned, corners_row_2_aligned, pattern_size_tmp);
+          uls::intersect_patterns(corners_row_1_transf, corners_row_2_transf, 
+                                  pattern_size_1, pattern_size_2, 
+                                  corners_row_1_aligned, corners_row_2_aligned, pattern_size_tmp);
 
         //   assert (pattern_size_tmp.width == pattern_size.width && pattern_size_tmp.height == pattern_size.height);
           pattern_size = pattern_size_tmp;
