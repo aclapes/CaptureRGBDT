@@ -82,12 +82,15 @@ int main(int argc, char * argv[]) try
     /* --------------   ------------------ */
     
     std::string input_dir_str;
+    bool loop = false;
 
     po::options_description desc("Program options");
     desc.add_options()
         ("help,h", "Print help messages")
         ("fps,f", po::value<float>()->default_value(0.f), "Acquisition speed (fps) of realsense (integer number 1~30)")
-        ("calibration-params", po::value<std::string>()->default_value(""), "Calibration mapping parameters")
+        ("loop,", po::bool_switch(&loop), "Loop the sequence visualization")
+        ("sync-delay,s", po::value<int>()->default_value(30), "Number of milliseconds (ms) del")
+        ("calibration-file", po::value<std::string>()->default_value(""), "Calibration mapping parameters")
         ("input-dir", po::value<std::string>(&input_dir_str)->required(), "Input directory containing rs/pt frames and timestamp files");
     
     po::positional_options_description positional_options; 
@@ -121,9 +124,10 @@ int main(int argc, char * argv[]) try
     fs::path depth_path (input_dir / fs::path("rs/depth/"));
     fs::path therm_path (input_dir / fs::path("pt/thermal/"));
 
-    fs::path calib_path (vm["calibration-params"].as<std::string>());
-    if (calib_path.empty())
-        calib_path = input_dir / fs::path("calibration.yml");
+    fs::path calib_filepath;
+    fs::path calib_file (vm["calibration-file"].as<std::string>());
+    if (!calib_file.empty())
+        calib_filepath = input_dir / fs::path("./calibration.yml");
 
     // cv::namedWindow("Viewer");
     float fps = vm["fps"].as<float>();
@@ -135,7 +139,7 @@ int main(int argc, char * argv[]) try
     std::vector<uls::Timestamp> log_pt = read_log_file(log_pt_path);
 
     std::vector<std::pair<uls::Timestamp,uls::Timestamp> > log_synced;
-    uls::time_sync(log_rs, log_pt, log_synced, 250);
+    uls::time_sync(log_rs, log_pt, log_synced, 50);
 
     cv::FileStorage fs;
 
@@ -143,24 +147,24 @@ int main(int argc, char * argv[]) try
     float depth_scale;
     if (fs.open(info_path.string(), cv::FileStorage::READ))
     {
-        fs["serial_number"] >> rs_serial_number;
-        fs["depth_scale"] >> depth_scale;
+        fs["rs-serial_number"] >> rs_serial_number;
+        fs["rs-depth_scale"] >> depth_scale;
         fs.release();
     }
 
     std::shared_ptr<std::map<std::string,uls::intrinsics_t> > intrinsics;
     std::shared_ptr<uls::extrinsics_t> extrinsics;
-    if (fs.open(calib_path.string(), cv::FileStorage::READ))
+    if (fs.open(calib_filepath.string(), cv::FileStorage::READ))
     {
         std::string modality_1, modality_2;
         fs["modality-1"] >> modality_1;
         fs["modality-2"] >> modality_2;
         
         intrinsics = std::make_shared<std::map<std::string,uls::intrinsics_t> >();
-        fs["camera_matrix_1"] >> (*intrinsics)[modality_1].camera_matrix;
-        fs["camera_matrix_2"] >> (*intrinsics)[modality_2].camera_matrix;
-        fs["dist_coeffs_1"]   >> (*intrinsics)[modality_1].dist_coeffs;
-        fs["dist_coeffs_2"]   >> (*intrinsics)[modality_2].dist_coeffs;
+        fs["camera_matrix-1"] >> (*intrinsics)[modality_1].camera_matrix;
+        fs["camera_matrix-2"] >> (*intrinsics)[modality_2].camera_matrix;
+        fs["dist_coeffs-1"]   >> (*intrinsics)[modality_1].dist_coeffs;
+        fs["dist_coeffs-2"]   >> (*intrinsics)[modality_2].dist_coeffs;
 
         extrinsics = std::make_shared<uls::extrinsics_t>();
         fs["R"] >> extrinsics->R;
@@ -168,52 +172,67 @@ int main(int argc, char * argv[]) try
         fs.release();
     }
 
-
-    for (int i = 0; i < log_synced.size() - 1; i++)
+    cv::namedWindow("Viewer");
+    do
     {
-        // read timestamps
-        uls::Timestamp rs_ts = log_synced[i].first;
-        uls::Timestamp pt_ts = log_synced[i].second;
-
-        // read frames
-        uls::ColorFrame   cf (color_path / fs::path("c_" + rs_ts.id + ".jpg"));
-        uls::DepthFrame   df (depth_path / fs::path("d_" + rs_ts.id + ".png"));
-        uls::ThermalFrame tf (therm_path / fs::path("t_" + pt_ts.id + ".png"), cv::Size(1280,720));
-
-        // preprocess frames
-        // d = uls::DepthFrame::to_8bit(d, cv::COLORMAP_JET);
-        // cv::cvtColor(tf.mat(), t, cv::COLOR_GRAY2BGR);
-
-        cv::Mat c,t,d,ta,cdt;
-        if (intrinsics != nullptr && extrinsics != nullptr)
+        for (int i = 0; i < log_synced.size() - 1; i++)
         {
-            // c = cf.mat().clone();
-            c.create(cf.mat().size(), cf.mat().type());
-            cv::undistort(cf.mat(), c, (*intrinsics)["Color"].camera_matrix, (*intrinsics)["Color"].dist_coeffs);
-            // d = df.mat().clone();
-            d.create(df.mat().size(), df.mat().type());
-            cv::undistort(df.mat(), d, (*intrinsics)["Color"].camera_matrix, (*intrinsics)["Color"].dist_coeffs);
-            // t = tf.mat().clone();
-            t.create(tf.mat().size(), tf.mat().type());
-            cv::undistort(tf.mat(), t, (*intrinsics)["Thermal"].camera_matrix, (*intrinsics)["Thermal"].dist_coeffs);
+            // read timestamps
+            uls::Timestamp rs_ts = log_synced[i].first;
+            uls::Timestamp pt_ts = log_synced[i].second;
 
-            cv::Mat map_x, map_y;
-            align_to_depth(d, (*intrinsics)["Color"].camera_matrix, (*intrinsics)["Thermal"].camera_matrix, depth_scale, extrinsics, map_x, map_y);
-            // std::cout << map_x << std::endl;
-            ta.create(t.size(), t.type());
-            cv::remap(t, ta, map_x, map_y, cv::INTER_LINEAR, cv::BORDER_CONSTANT, 0);
+            // read frames
+            cv::Mat c = cv::imread((color_path / fs::path("c_" + rs_ts.id + ".jpg")).string(), cv::IMREAD_UNCHANGED);
+            
+            cv::Mat d = cv::imread((depth_path / fs::path("d_" + rs_ts.id + ".png")).string(), cv::IMREAD_UNCHANGED);
+            d.setTo(0, d > 5000);
+
+            cv::Mat d8;
+            uls::depth_to_8bit(d, d8, cv::COLORMAP_BONE);
+            
+            cv::Mat t = cv::imread((therm_path / fs::path("t_" + pt_ts.id + ".png")).string(), cv::IMREAD_UNCHANGED);
+            cv::Rect t_roi = uls::resize(t, t, d.size());
+            cv::Mat t8;
+            uls::thermal_to_8bit(t, t8, t_roi);
+
+            cv::Mat ta;
+            
+            if (intrinsics != nullptr && extrinsics != nullptr)
+            {
+                cv::Mat cu  ( c.size(),  c.type());
+                cv::Mat d8u (d8.size(), d8.type());
+                cv::Mat t8u (t8.size(), t8.type());            
+                cv::undistort(c, cu, (*intrinsics)["rs/color,rs/depth"].camera_matrix, (*intrinsics)["rs/color,rs/depth"].dist_coeffs);
+                cv::undistort(d8, d8u, (*intrinsics)["rs/color,rs/depth"].camera_matrix, (*intrinsics)["rs/color,rs/depth"].dist_coeffs);
+                cv::undistort(t8, t8u, (*intrinsics)["pt/thermal"].camera_matrix, (*intrinsics)["pt/thermal"].dist_coeffs);
+
+                cv::Mat map_x, map_y;
+                cv::Mat du (d.size(), d.type());
+                cv::undistort(d, du, (*intrinsics)["rs/color,rs/depth"].camera_matrix, (*intrinsics)["rs/color,rs/depth"].dist_coeffs);
+                align_to_depth(du, (*intrinsics)["rs/color,rs/depth"].camera_matrix, (*intrinsics)["pt/thermal"].camera_matrix, depth_scale, extrinsics, map_x, map_y);
+
+                cv::Mat t8a;
+                t8a.create(t8u.size(), t8u.type());
+                cv::remap(t8u, t8a, map_x, map_y, cv::INTER_LINEAR, cv::BORDER_CONSTANT, 0);
+
+                c  = cu;
+                d  = d8u;
+                t  = t8u;
+                ta = t8a;
+            }
+            
+            // tile frame images in a mosaic
+            std::vector<cv::Mat> frames = {c, d, t, ta};
+            cv::Mat tiling;
+            uls::tile(frames, 1280, 720, 2, 2, tiling);
+
+            // visualize mosaic
+            cv::imshow("Viewer", tiling);
+            cv::waitKey(wait_time > 0 ? wait_time : log_synced[i+1].first.time - rs_ts.time);
         }
-        
-        // tile frame images in a mosaic
-        std::vector<cv::Mat> frames = {c, uls::DepthFrame::to_8bit(d, cv::COLORMAP_JET), t, ta};
-        cv::Mat tiling;
-        uls::tile(frames, 1280, 720, 2, 2, tiling);
-
-        // visualize mosaic
-        cv::imshow("Viewer", tiling);
-        cv::waitKey(wait_time > 0 ? wait_time : log_synced[i+1].first.time - rs_ts.time);
-    }
-    // cv::destroyWindow("Viewer");
+    } while (loop);
+    
+    cv::destroyWindow("Viewer");
 
     return SUCCESS;
 }

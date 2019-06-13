@@ -1,7 +1,7 @@
 #  minimum required cmake version: 3.1.0
 cmake_minimum_required(VERSION 3.1.0)
 
-project(CaptureRGBDT)
+project(RGBDT)
 
 # Save the command line compile commands in the build output
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
@@ -33,18 +33,34 @@ else()
     set(ADDITIONAL_LIBRARY_DIRS "/usr/local/lib")
 endif()
 
+set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} /usr/lib64)
 
 find_library(REALSENSE2_FOUND realsense2 HINTS ${LIBRARY_DIR} REQUIRED)
 if(NOT REALSENSE2_FOUND)
     SET(REALSENSE2_FOUND "realsense2")
-    message(WARN "Failed to find_library(realsense2)")
+    message(FATAL_ERROR "Failed to find_library(realsense2)")
 endif()
-# getting-started
+
 find_library(LIBUVC_FOUND uvc HINTS ${LIBRARY_DIR} REQUIRED)
-#find_library(OPENCV_FOUND opencv_core opencv_imgproc opencv_highgui opencv_ml opencv_video opencv_features2d opencv_calib3d opencv_objdetect opencv_contrib opencv_legacy opencv_flann opencv_imgcodecs HINTS ${LIBRARY_DIR} REQUIRED )
+if(NOT LIBUVC_FOUND)
+    SET(LIBUVC_FOUND "libuvc")
+    message(FATAL_ERROR "Failed to find_library(libuvc)")
+endif()
+
+#find_library(OPENCV_FOUND opencv_core opencv_imgproc opencv_highgui opencv_ml opencv_video opencv_features2d opencv_calib3d opencv_objdetect opencv_contrib opencv_legacy opencv_flann opencv_imgcodecs PATHS ${CMAKE_LIBRARY_PATH} REQUIRED )
+#if(NOT OPENCV_FOUND)
+#    SET(OPENCV_FOUND "opencv")
+#    message(FATAL_ERROR "Failed to find_library(opencv)")
+#endif()
+
 #find_library(BOOST_FOUND boost_system boost_filesystem HINTS ${LIBRARY_DIR} REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system filesystem program_options)
+#if(NOT BOOST_FOUND)
+#    SET(BOOST_FOUND "boost")
+#    message(FATAL_ERROR "Failed to find_library(boost)")
+#endif()
 find_package(OpenCV REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system filesystem program_options)
+
 
 # add_executable(capture-rgbt capture-rgbt.cpp pt_pipeline.hpp safe_queue.hpp pt_pipeline.hpp safe_queue.hpp utils/common.hpp utils/calibration.hpp detection.hpp)
 # include_directories(capture-rgbt ${ADDITIONAL_INCLUDE_DIRS})

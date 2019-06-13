@@ -31,7 +31,8 @@ add_executable(calib-extrinsics calib-extrinsics.cpp)
 include_directories(calib-extrinsics ${ADDITIONAL_INCLUDE_DIRS})
 target_link_libraries(calib-extrinsics PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
 
-# add_executable(test_chessboard_detection test_chessboard_detection.cpp utils.hpp)
-# include_directories(test_chessboard_detection ${ADDITIONAL_INCLUDE_DIRS})
-# target_link_libraries(test_chessboard_detection PRIVATE ${Boost_LIBRARIES} ${OpenCV_LIBS})
+add_executable(rm-empty-captures rm-empty-captures.cpp)
+include_directories(rm-empty-captures ${ADDITIONAL_INCLUDE_DIRS})
+target_link_libraries(rm-empty-captures PRIVATE ${Boost_LIBRARIES})
 
+add_subdirectory(tests)

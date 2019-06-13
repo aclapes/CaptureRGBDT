@@ -34,14 +34,14 @@ namespace
  
 } // namespace
 
-template<typename T>
+// template<typename T>
 void find_chessboard_corners(std::vector<std::string> frames, 
                              cv::Size pattern_size, 
                              std::vector<cv::Mat> & frames_corners,
                              std::vector<int> & frames_inds,
                              cv::Size resize_dims = cv::Size(),
                              std::string prefix = "",
-                             int y_shift = 0,
+                            //  int y_shift = 0,
                              bool verbose = true) 
 {
     frames_corners.clear();
@@ -54,7 +54,9 @@ void find_chessboard_corners(std::vector<std::string> frames,
     for (int i = 0; i < frames.size(); i++) 
     {
         /* read and preprocess frame */
-        cv::Mat img = T(fs::path(prefix) / fs::path(frames[i]), resize_dims, y_shift).mat();
+        // cv::Mat img = T(fs::path(prefix) / fs::path(frames[i]), resize_dims).get();
+        cv::Mat img = cv::imread((fs::path(prefix) / fs::path(frames[i])).string(), cv::IMREAD_UNCHANGED);
+        uls::resize(img, img, resize_dims);
 
         corners.release();
         // cv::GaussianBlur(fra, img, cv::Size(0, 0), 3);
@@ -126,22 +128,22 @@ int main(int argc, char * argv[]) try
         // ("corner-selection,s", po::value<std::string>()->default_value("./corner-selection.yml"), "")
         // ("intrinsics,i", po::value<std::string>()->default_value("./intrinsics.yml"), "")
         // ("modality,m", po::value<std::string>()->default_value("Thermal"), "Visual modality")
+        ("input-file-or-dir", po::value<std::string>(&input_list_file_str)->required(), "File containing list of calibration sequence directories")
         ("prefix,f", po::value<std::string>()->default_value(""), "Prefix")
-        ("log-file,l", po::value<std::string>()->default_value(""), "Log file (e.g. rs.log)")
-        ("file-ext,x", po::value<std::string>()->default_value(".jpg"), "Image file extension")
-        ("pattern,p", po::value<std::string>()->default_value("11,8"), "Pattern size \"x,y\" squares")
+        // ("log-file,l", po::value<std::string>()->default_value(""), "Log file (e.g. rs.log)")
+        // ("file-ext,x", po::value<std::string>()->default_value(".jpg"), "Image file extension")
+        ("pattern-size,p", po::value<std::string>()->default_value("11,8"), "Pattern size \"x,y\" squares")
         ("resize-dims,r", po::value<std::string>()->default_value("960,720"), "Resize frame to (h,w)")
-         ("y-shift,y", po::value<int>()->default_value(0), "Y-shift")
+        //  ("y-shift,y", po::value<int>()->default_value(0), "Y-shift")
         // ("verbose,v", po::bool_switch(&verbose), "Verbosity")
         ("verbose,v", po::value<int>()->default_value(0), "")
-        ("input-list-file", po::value<std::string>(&input_list_file_str)->required(), "File containing list of calibration sequence directories")
-        ("modality", po::value<std::string>(&modality_str)->required(), "Modality (either Color or Thermal)")
+        // ("modality", po::value<std::string>(&modality_str)->required(), "Modality (either Color or Thermal)")
         ("output-file", po::value<std::string>(&output_file_str)->required(), "Output file");
 
     
     po::positional_options_description positional_options; 
-    positional_options.add("input-list-file", 1); 
-    positional_options.add("modality", 1); 
+    positional_options.add("input-file-or-dir", 1); 
+    positional_options.add("prefix", 1); 
     positional_options.add("output-file", 1); 
 
     po::variables_map vm;
@@ -161,10 +163,14 @@ int main(int argc, char * argv[]) try
     /*    Main code    */
     /* --------------- */
 
+    // process all program arguments ---
+
+    // read verbosity level from program arguments (po)
     verbose = vm["verbose"].as<int>();
 
+    // read calibration pattern size from po
     std::vector<std::string> pattern_size_aux;
-    boost::split(pattern_size_aux, vm["pattern"].as<std::string>(), boost::is_any_of(","));
+    boost::split(pattern_size_aux, vm["pattern-size"].as<std::string>(), boost::is_any_of(","));
     assert(pattern_size_aux.size() == 2);
 
     int x = std::stoi(pattern_size_aux[0]);
@@ -172,30 +178,44 @@ int main(int argc, char * argv[]) try
     assert(x > 2 && y > 2);
     cv::Size pattern_size (x,y);
 
+    // read prefix directory for this particular modality from po, e.g. rs/color, rs/depth, or pt/thermal
+    std::string prefix = vm["prefix"].as<std::string>();
+    boost::trim_if(prefix, &uls::is_bar);  // remove leading and tailing '/' and '\' bars
+
+    // read image resize dimensions from po, e.g 1280,720,
+    // to resize frames to w x h before trying to find chessboard corners
     cv::Size resize_dims;
     if (vm.find("resize-dims") != vm.end())
     {
         std::vector<std::string> resize_dims_aux;
         boost::split(resize_dims_aux, vm["resize-dims"].as<std::string>(), boost::is_any_of(","));
-        assert(resize_dims_aux.size() == 2);
 
-        int w = std::stoi(resize_dims_aux[0]);
-        int h = std::stoi(resize_dims_aux[1]);
-        assert(w > 160 && h > 120);
-        resize_dims = cv::Size(w,h); // resize frames to (w,h) before finding chessboard corners
+        int w, h;
+        if (resize_dims_aux.size() < 1)
+            return EXIT_FAILURE;
+        else if (resize_dims_aux.size() == 1)
+            w = h = std::stoi(resize_dims_aux[0]);
+        else
+        {
+            w = std::stoi(resize_dims_aux[0]);
+            h = std::stoi(resize_dims_aux[1]);
+        }
+        resize_dims = cv::Size(w,h); 
     }
     
-    // ---
+    // --- end process program arguments
     
+    // list the calibration sequences within input-file-or-dir, which can be either
+    // a file listing diretories or a directory of directories
     std::vector<std::string> sequence_dirs;
 
     fs::path input_p (input_list_file_str);
-    if (fs::is_directory(input_p))
+    if (fs::is_directory(input_p))  // if a directory
     {
         for(auto& entry : boost::make_iterator_range(fs::directory_iterator(input_p), {}))
             sequence_dirs.push_back(entry.path().string());
     }
-    else
+    else  // if a file
     {
         std::ifstream dir_list_reader;
         dir_list_reader.open(input_list_file_str);
@@ -210,62 +230,59 @@ int main(int argc, char * argv[]) try
     
     if (sequence_dirs.empty())
     {
-        std::cerr << "Calibration file (input-list-file argument) not found." << std::endl;
+        std::cerr << "Calibration file (input-file-or-dir argument) not found." << std::endl;
         return EXIT_FAILURE;
     }
     
-    // fs::path input_dir (vm["input-dir"].as<std::string>());
+    // list all the frames in the sequences as a hash map: (sequence_name, list_of_sequence_frame_filepaths)
+
     std::map<std::string, std::vector<std::string> > sequences;
     for (std::string seq_dir : sequence_dirs)
     {
-        // Alternatives
-        // <===========
-        // (1) Requires including "utils/synchronization.hpp"
-        // std::vector<uls::Timestamp> log = uls::read_log_file(seq_dir + "/" + vm["log-file"].as<std::string>());
-        // std::vector<std::string> frame_paths (log.size());
-        // for (int i = 0; i < log.size(); i++)
-        // {
-        //     uls::Timestamp ts = log[i];
-        //     std::string rel_path = vm["prefix"].as<std::string>() + ts.id + vm["file-ext"].as<std::string>();
-        //     // frame_paths[i] = seq_dir + "/" + rel_path;
-        //     frame_paths[i] = rel_path;
-        // }
-        // ------------
-        // (2) and this does not
-        std::vector<std::string> s = uls::list_files_in_directory(seq_dir, vm["prefix"].as<std::string>(), vm["file-ext"].as<std::string>());
-        std::sort(s.begin(), s.end());
-        // ===========>
+        std::vector<std::string> s = uls::list_images_in_directory(seq_dir, vm["prefix"].as<std::string>());  // lists jpg/png files
+        std::sort(s.begin(), s.end());  // sort alphabetically
         sequences[seq_dir] = s;
     }
 
-    // std::vector<cv::Mat> sequence_corners;
-    // std::vector<std::string> corner_frames;
-
     cv::FileStorage fstorage (vm["output-file"].as<std::string>(), cv::FileStorage::WRITE);
+    fstorage << "prefix" << prefix;
     fstorage << "pattern_size" << pattern_size;
     fstorage << "resize_dims" << resize_dims;
-    fstorage << "modality" << modality_str;
-    fstorage << "y-shift" << vm["y-shift"].as<int>();
-    fstorage << "prefix" << vm["prefix"].as<std::string>();
-    fstorage << "log-file" << vm["log-file"].as<std::string>();
-    fstorage << "file-extension" << vm["file-ext"].as<std::string>();
-    fstorage << "sequence_dirs" << ((int) sequence_dirs.size());
+    // fstorage << "modality" << vm["prefix"].as<std::string>(); //modality_str;
+    // fstorage << "y-shift" << vm["y-shift"].as<int>();
+    // fstorage << "log-file" << vm["log-file"].as<std::string>();
+    // fstorage << "file-extension" << vm["file-ext"].as<std::string>();
+    fstorage << "nb_sequences" << ((int) sequence_dirs.size());
 
     // // std::vector<int> fids; // keep track
     // // boost::progress_display pd (sequences.size());
     std::map<std::string, std::vector<std::string> >::iterator it;
     int i;
+    std::string serial_number;
+
     for (it = sequences.begin(), i = 0; it != sequences.end(); it++, i++)
     {
+        // Consistency check: all calibration sequences were captures with the same camera
+        // ---
+        cv::FileStorage fs ( (fs::path(it->first) / fs::path("rs_info.yml")).string(), cv::FileStorage::READ );
+        std::string sn;
+        if (fs.isOpened())
+            fs["serial_number"] >> sn;
+
+        assert (serial_number.empty() || serial_number == sn);
+        serial_number = sn;
+        // ---
+
         if (verbose > 0) 
             std::cout << "Processing (" << i + 1 << "/" << sequences.size() << "): " << it->first << std::endl;
         
         std::vector<cv::Mat> corners_aux;
         std::vector<int> fids;
-        if (modality_str == "Color")
-            find_chessboard_corners<uls::ColorFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, vm["y-shift"].as<int>(), verbose > 1);
-        else if (modality_str == "Thermal")
-            find_chessboard_corners<uls::ThermalFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, vm["y-shift"].as<int>(), verbose > 1);
+        // if (modality_str == "Color")
+        //     find_chessboard_corners<uls::ColorFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, verbose > 1);
+        // else if (modality_str == "Thermal")
+        //     find_chessboard_corners<uls::ThermalFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, verbose > 1);
+        find_chessboard_corners(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, verbose > 1);
 
         assert(corners_aux.size() == fids.size());
 
@@ -285,6 +302,8 @@ int main(int argc, char * argv[]) try
         if (verbose > 0) 
             std::cout << "Corners found in: " << frames.size() << "/" << it->second.size() << " frames\n";
     }
+
+    fstorage << "serial_number" << serial_number;
 
     fstorage.release();
 

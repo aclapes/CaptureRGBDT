@@ -17,6 +17,9 @@
 
 namespace uls
 {
+    /*
+     * Frame difference-based movement detector class
+     */
     class MovementDetector
     {
         public:
@@ -37,7 +40,7 @@ namespace uls
                 swap(first.m_frame_ratio, second.m_frame_ratio);
             }
 
-            MovementDetector& operator=(MovementDetector other)
+            MovementDetector& operator=(MovementDetector & other)
             {
                 swap(*this, other);
                 return *this;
@@ -45,8 +48,8 @@ namespace uls
 
             bool find(cv::Mat src)
             {
-                bool found;
-                if (found = !src_prev.empty())
+                bool found = false;
+                if (!src.empty() && !src_prev.empty())
                 {
                     assert(src.rows == src_prev.rows && src.cols == src_prev.cols && src.channels() == src_prev.channels());
 
@@ -58,6 +61,7 @@ namespace uls
                 }
 
                 src_prev = src;
+
                 return found;
             }
 

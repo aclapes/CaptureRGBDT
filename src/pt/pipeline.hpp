@@ -1,5 +1,5 @@
 //
-//  pt_pipeline.hpp
+//  pt/pipeline.hpp
 //  RealsenseExamplesGettingStarted
 //
 //  Created by Albert Clapés on 27/11/2018.
@@ -11,6 +11,7 @@
 #define PT1_VID 0x1e4e
 #define PT1_PID 0x0100
 
+#include <exception>
 #include "libuvc/libuvc.h"
 
 namespace pt
@@ -52,6 +53,7 @@ namespace pt
         uvc_device_handle_t *devh;
         uvc_stream_handle_t *strmh;
         uvc_stream_ctrl_t ctrl;
+        uvc_frame_t **frame;
         
     public:
         pipeline()

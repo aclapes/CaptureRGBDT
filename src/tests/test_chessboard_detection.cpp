@@ -2,7 +2,7 @@
 #include <iostream>
 #include <opencv2/core/utils/logger.defines.hpp>
 #include <opencv2/core/utils/logger.hpp>
-#include "utils/common.hpp"
+#include "../utils/common.hpp"
 
 void align_pattern_corners(cv::Mat a, cv::Mat b, cv::Size pattern_a, cv::Size pattern_b, cv::Mat & aa, cv::Mat & bb)
 {

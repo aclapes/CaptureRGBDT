@@ -189,6 +189,9 @@ namespace uls
         map_x.create(depth.size(), CV_32FC1);
         map_y.create(depth.size(), CV_32FC1);
 
+        map_x.setTo(-1);
+        map_y.setTo(-1);
+
         for (int i = 0; i < depth.rows; i++)
         {
             for (int j = 0; j < depth.cols; j++)

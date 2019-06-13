@@ -132,257 +132,6 @@ cv::Mat drawEpipolarLines(const cv::Matx<T1,3,3> F,
   return outImg;
 }
 
-// template <typename FLOAT>
-// void computeTiltProjectionMatrix(FLOAT tauX,
-//     FLOAT tauY,
-//     Matx<FLOAT, 3, 3>* matTilt = 0,
-//     Matx<FLOAT, 3, 3>* dMatTiltdTauX = 0,
-//     Matx<FLOAT, 3, 3>* dMatTiltdTauY = 0,
-//     Matx<FLOAT, 3, 3>* invMatTilt = 0)
-// {
-//     FLOAT cTauX = cos(tauX);
-//     FLOAT sTauX = sin(tauX);
-//     FLOAT cTauY = cos(tauY);
-//     FLOAT sTauY = sin(tauY);
-//     Matx<FLOAT, 3, 3> matRotX = Matx<FLOAT, 3, 3>(1,0,0,0,cTauX,sTauX,0,-sTauX,cTauX);
-//     Matx<FLOAT, 3, 3> matRotY = Matx<FLOAT, 3, 3>(cTauY,0,-sTauY,0,1,0,sTauY,0,cTauY);
-//     Matx<FLOAT, 3, 3> matRotXY = matRotY * matRotX;
-//     Matx<FLOAT, 3, 3> matProjZ = Matx<FLOAT, 3, 3>(matRotXY(2,2),0,-matRotXY(0,2),0,matRotXY(2,2),-matRotXY(1,2),0,0,1);
-//     if (matTilt)
-//     {
-//         // Matrix for trapezoidal distortion of tilted image sensor
-//         *matTilt = matProjZ * matRotXY;
-//     }
-//     if (dMatTiltdTauX)
-//     {
-//         // Derivative with respect to tauX
-//         Matx<FLOAT, 3, 3> dMatRotXYdTauX = matRotY * Matx<FLOAT, 3, 3>(0,0,0,0,-sTauX,cTauX,0,-cTauX,-sTauX);
-//         Matx<FLOAT, 3, 3> dMatProjZdTauX = Matx<FLOAT, 3, 3>(dMatRotXYdTauX(2,2),0,-dMatRotXYdTauX(0,2),
-//           0,dMatRotXYdTauX(2,2),-dMatRotXYdTauX(1,2),0,0,0);
-//         *dMatTiltdTauX = (matProjZ * dMatRotXYdTauX) + (dMatProjZdTauX * matRotXY);
-//     }
-//     if (dMatTiltdTauY)
-//     {
-//         // Derivative with respect to tauY
-//         Matx<FLOAT, 3, 3> dMatRotXYdTauY = Matx<FLOAT, 3, 3>(-sTauY,0,-cTauY,0,0,0,cTauY,0,-sTauY) * matRotX;
-//         Matx<FLOAT, 3, 3> dMatProjZdTauY = Matx<FLOAT, 3, 3>(dMatRotXYdTauY(2,2),0,-dMatRotXYdTauY(0,2),
-//           0,dMatRotXYdTauY(2,2),-dMatRotXYdTauY(1,2),0,0,0);
-//         *dMatTiltdTauY = (matProjZ * dMatRotXYdTauY) + (dMatProjZdTauY * matRotXY);
-//     }
-//     if (invMatTilt)
-//     {
-//         FLOAT inv = 1./matRotXY(2,2);
-//         Matx<FLOAT, 3, 3> invMatProjZ = Matx<FLOAT, 3, 3>(inv,0,inv*matRotXY(0,2),0,inv,inv*matRotXY(1,2),0,0,1);
-//         *invMatTilt = matRotXY.t()*invMatProjZ;
-//     }
-// }
-
-// void my_cvUndistortPointsInternal( const CvMat* _src, CvMat* _dst, const CvMat* _cameraMatrix,
-//                    const CvMat* _distCoeffs,
-//                    const CvMat* matR, const CvMat* matP, cv::TermCriteria criteria)
-// {
-//     CV_Assert(criteria.isValid());
-//     double A[3][3], RR[3][3], k[14]={0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-//     CvMat matA=cvMat(3, 3, CV_64F, A), _Dk;
-//     CvMat _RR=cvMat(3, 3, CV_64F, RR);
-//     cv::Matx33d invMatTilt = cv::Matx33d::eye();
-//     cv::Matx33d matTilt = cv::Matx33d::eye();
-
-//     CV_Assert( CV_IS_MAT(_src) && CV_IS_MAT(_dst) &&
-//         (_src->rows == 1 || _src->cols == 1) &&
-//         (_dst->rows == 1 || _dst->cols == 1) &&
-//         _src->cols + _src->rows - 1 == _dst->rows + _dst->cols - 1 &&
-//         (CV_MAT_TYPE(_src->type) == CV_32FC2 || CV_MAT_TYPE(_src->type) == CV_64FC2) &&
-//         (CV_MAT_TYPE(_dst->type) == CV_32FC2 || CV_MAT_TYPE(_dst->type) == CV_64FC2));
-
-//     CV_Assert( CV_IS_MAT(_cameraMatrix) &&
-//         _cameraMatrix->rows == 3 && _cameraMatrix->cols == 3 );
-
-//     cvConvert( _cameraMatrix, &matA );
-
-
-//     if( _distCoeffs )
-//     {
-//         CV_Assert( CV_IS_MAT(_distCoeffs) &&
-//             (_distCoeffs->rows == 1 || _distCoeffs->cols == 1) &&
-//             (_distCoeffs->rows*_distCoeffs->cols == 4 ||
-//              _distCoeffs->rows*_distCoeffs->cols == 5 ||
-//              _distCoeffs->rows*_distCoeffs->cols == 8 ||
-//              _distCoeffs->rows*_distCoeffs->cols == 12 ||
-//              _distCoeffs->rows*_distCoeffs->cols == 14));
-
-//         _Dk = cvMat( _distCoeffs->rows, _distCoeffs->cols,
-//             CV_MAKETYPE(CV_64F,CV_MAT_CN(_distCoeffs->type)), k);
-
-//         cvConvert( _distCoeffs, &_Dk );
-//         if (k[12] != 0 || k[13] != 0)
-//         {
-//             computeTiltProjectionMatrix<double>(k[12], k[13], NULL, NULL, NULL, &invMatTilt);
-//             computeTiltProjectionMatrix<double>(k[12], k[13], &matTilt, NULL, NULL);
-//         }
-//     }
-
-//     if( matR )
-//     {
-//         CV_Assert( CV_IS_MAT(matR) && matR->rows == 3 && matR->cols == 3 );
-//         cvConvert( matR, &_RR );
-//     }
-//     else
-//         cvSetIdentity(&_RR);
-
-//     if( matP )
-//     {
-//         double PP[3][3];
-//         CvMat _P3x3, _PP=cvMat(3, 3, CV_64F, PP);
-//         CV_Assert( CV_IS_MAT(matP) && matP->rows == 3 && (matP->cols == 3 || matP->cols == 4));
-//         cvConvert( cvGetCols(matP, &_P3x3, 0, 3), &_PP );
-//         cvMatMul( &_PP, &_RR, &_RR );
-//     }
-
-//     const CvPoint2D32f* srcf = (const CvPoint2D32f*)_src->data.ptr;
-//     const CvPoint2D64f* srcd = (const CvPoint2D64f*)_src->data.ptr;
-//     CvPoint2D32f* dstf = (CvPoint2D32f*)_dst->data.ptr;
-//     CvPoint2D64f* dstd = (CvPoint2D64f*)_dst->data.ptr;
-//     int stype = CV_MAT_TYPE(_src->type);
-//     int dtype = CV_MAT_TYPE(_dst->type);
-//     int sstep = _src->rows == 1 ? 1 : _src->step/CV_ELEM_SIZE(stype);
-//     int dstep = _dst->rows == 1 ? 1 : _dst->step/CV_ELEM_SIZE(dtype);
-
-//     double fx = A[0][0];
-//     double fy = A[1][1];
-//     double ifx = 1./fx;
-//     double ify = 1./fy;
-//     double cx = A[0][2];
-//     double cy = A[1][2];
-
-//     int n = _src->rows + _src->cols - 1;
-//     for( int i = 0; i < n; i++ )
-//     {
-//         double x, y, x0 = 0, y0 = 0, u, v;
-//         if( stype == CV_32FC2 )
-//         {
-//             x = srcf[i*sstep].x;
-//             y = srcf[i*sstep].y;
-//         }
-//         else
-//         {
-//             x = srcd[i*sstep].x;
-//             y = srcd[i*sstep].y;
-//         }
-//         u = x; v = y;
-//         x = (x - cx)*ifx;
-//         y = (y - cy)*ify;
-
-//         if( _distCoeffs ) {
-//             // compensate tilt distortion
-//             cv::Vec3d vecUntilt = invMatTilt * cv::Vec3d(x, y, 1);
-//             double invProj = vecUntilt(2) ? 1./vecUntilt(2) : 1;
-//             x0 = x = invProj * vecUntilt(0);
-//             y0 = y = invProj * vecUntilt(1);
-
-//             double error = std::numeric_limits<double>::max();
-//             // compensate distortion iteratively
-
-//             for( int j = 0; ; j++ )
-//             {
-//                 if ((criteria.type & cv::TermCriteria::COUNT) && j >= criteria.maxCount)
-//                     break;
-//                 if ((criteria.type & cv::TermCriteria::EPS) && error < criteria.epsilon)
-//                     break;
-//                 double r2 = x*x + y*y;
-//                 double icdist = (1 + ((k[7]*r2 + k[6])*r2 + k[5])*r2)/(1 + ((k[4]*r2 + k[1])*r2 + k[0])*r2);
-//                 double deltaX = 2*k[2]*x*y + k[3]*(r2 + 2*x*x)+ k[8]*r2+k[9]*r2*r2;
-//                 double deltaY = k[2]*(r2 + 2*y*y) + 2*k[3]*x*y+ k[10]*r2+k[11]*r2*r2;
-//                 x = (x0 - deltaX)*icdist;
-//                 y = (y0 - deltaY)*icdist;
-
-//                 if(criteria.type & cv::TermCriteria::EPS)
-//                 {
-//                     double r4, r6, a1, a2, a3, cdist, icdist2;
-//                     double xd, yd, xd0, yd0;
-//                     cv::Vec3d vecTilt;
-
-//                     r2 = x*x + y*y;
-//                     r4 = r2*r2;
-//                     r6 = r4*r2;
-//                     a1 = 2*x*y;
-//                     a2 = r2 + 2*x*x;
-//                     a3 = r2 + 2*y*y;
-//                     cdist = 1 + k[0]*r2 + k[1]*r4 + k[4]*r6;
-//                     icdist2 = 1./(1 + k[5]*r2 + k[6]*r4 + k[7]*r6);
-//                     xd0 = x*cdist*icdist2 + k[2]*a1 + k[3]*a2 + k[8]*r2+k[9]*r4;
-//                     yd0 = y*cdist*icdist2 + k[2]*a3 + k[3]*a1 + k[10]*r2+k[11]*r4;
-
-//                     vecTilt = matTilt*cv::Vec3d(xd0, yd0, 1);
-//                     invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
-//                     xd = invProj * vecTilt(0);
-//                     yd = invProj * vecTilt(1);
-
-//                     double x_proj = xd*fx + cx;
-//                     double y_proj = yd*fy + cy;
-
-//                     error = sqrt( pow(x_proj - u, 2) + pow(y_proj - v, 2) );
-//                 }
-//             }
-//         } 
-
-//         double xx = RR[0][0]*x + RR[0][1]*y + RR[0][2];
-//         double yy = RR[1][0]*x + RR[1][1]*y + RR[1][2];
-//         double ww = 1./(RR[2][0]*x + RR[2][1]*y + RR[2][2]);
-//         x = xx*ww;
-//         y = yy*ww;
-
-//         if( dtype == CV_32FC2 )
-//         {
-//             dstf[i*dstep].x = (float)x;
-//             dstf[i*dstep].y = (float)y;
-//         }
-//         else
-//         {
-//             dstd[i*dstep].x = x;
-//             dstd[i*dstep].y = y;
-//         }
-//     }
-// }
-
-// void my_undistortPoints(InputArray _src, OutputArray _dst,
-//                      InputArray _cameraMatrix,
-//                      InputArray _distCoeffs,
-//                      InputArray _Rmat,
-//                      InputArray _Pmat,
-//                      TermCriteria criteria)
-// {
-//     Mat src = _src.getMat(), cameraMatrix = _cameraMatrix.getMat();
-//     Mat distCoeffs = _distCoeffs.getMat(), R = _Rmat.getMat(), P = _Pmat.getMat();
-
-//     CV_Assert( src.isContinuous() && (src.depth() == CV_32F || src.depth() == CV_64F) &&
-//               ((src.rows == 1 && src.channels() == 2) || src.cols*src.channels() == 2));
-
-//     _dst.create(src.size(), src.type(), -1, true);
-//     Mat dst = _dst.getMat();
-
-//     CvMat _csrc = cvMat(src), _cdst = cvMat(dst), _ccameraMatrix = cvMat(cameraMatrix);
-//     CvMat matR, matP, _cdistCoeffs, *pR=0, *pP=0, *pD=0;
-//     if( !R.empty() )
-//         pR = &(matR = cvMat(R));
-//     if( !P.empty() )
-//         pP = &(matP = cvMat(P));
-//     if( !distCoeffs.empty() )
-//         pD = &(_cdistCoeffs = cvMat(distCoeffs));
-//     my_cvUndistortPointsInternal(&_csrc, &_cdst, &_ccameraMatrix, pD, pR, pP, criteria);
-// }
-
-// void _undistortPoints(InputArray _src, OutputArray _dst,
-//                      InputArray _cameraMatrix,
-//                      InputArray _distCoeffs,
-//                      InputArray _Rmat,
-//                      InputArray _Pmat = noArray())
-// {
-//     my_undistortPoints(_src, _dst, _cameraMatrix, _distCoeffs, _Rmat, _Pmat, TermCriteria(TermCriteria::MAX_ITER, 5, 0.01));
-// }
-
-
-
 int main(int argc, char * argv[]) try
 {
     /* -------------------------------- */
@@ -404,6 +153,7 @@ int main(int argc, char * argv[]) try
         // ("verbose,v", po::bool_switch(&verbose), "Verbosity")
         ("nb-clusters,k", po::value<int>()->default_value(50), "Number of k-means clusters")
         ("vflip,f", po::bool_switch(&vflip), "Vertical flip registered images")
+        ("sync-delay", po::value<int>()->default_value(30), "Maximum time delay between RS and PT (in milliseconds)")
         ("intermediate-file,e", po::value<std::string>()->default_value(""), "Intermediate file")
         ("output-parameters,o", po::value<std::string>()->default_value(""), "Output parameters")
         ("corners-1", po::value<std::string>(&corners_file_1)->required(), "")
@@ -462,9 +212,9 @@ int main(int argc, char * argv[]) try
     corners_fs_1["pattern_size"] >> pattern_size_1;
     corners_fs_2["pattern_size"] >> pattern_size_2;
 
-    int y_shift_1, y_shift_2;
-    corners_fs_1["y-shift"] >> y_shift_1;
-    corners_fs_2["y-shift"] >> y_shift_2;
+    // int y_shift_1, y_shift_2;
+    // corners_fs_1["y-shift"] >> y_shift_1;
+    // corners_fs_2["y-shift"] >> y_shift_2;
 
     // Read frames and corners
 
@@ -481,7 +231,7 @@ int main(int argc, char * argv[]) try
         std::vector<uls::Timestamp> log_1 = uls::read_log_file(fs::path(sequence_dir_1) / fs::path(corners_fs_1["log-file"]));
         std::vector<uls::Timestamp> log_2 = uls::read_log_file(fs::path(sequence_dir_2) / fs::path(corners_fs_2["log-file"]));
         std::vector<std::pair<uls::Timestamp,uls::Timestamp> > log_12;
-        uls::time_sync(log_1, log_2, log_12, 50);
+        uls::time_sync(log_1, log_2, log_12, vm["sync-delay"].as<int>());
 
         std::vector<std::string> frames_1, frames_2;
         corners_fs_1["frames-" + std::to_string(i)] >> frames_1;
@@ -543,180 +293,193 @@ int main(int argc, char * argv[]) try
     }
     else // New selection
     {
-      // Cluster patterns corner positions so we ensure a proper coverage of the camera space
+        // Cluster patterns corner positions so we ensure a proper coverage of the camera space
 
-      int K = vm["nb-clusters"].as<int>();
-      cv::Mat labels, centers;
-      cv::kmeans(corners_all_1, K, labels, cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER, 30, 1.0), 3, cv::KMEANS_PP_CENTERS, centers);
+        int K = vm["nb-clusters"].as<int>();
+        cv::Mat labels, centers;
+        cv::kmeans(corners_all_1, K, labels, cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER, 30, 1.0), 3, cv::KMEANS_PP_CENTERS, centers);
 
-      // Shuffle the order of cluster elements
+        // Shuffle the order of cluster elements
 
-      std::vector<std::vector<int> > indices;
-      for (int k = 0; k < K; k++)
-      {
-          std::vector<int> indices_k;
-          for (int i = 0; i < labels.rows; i++)
-              if (labels.at<int>(i,0) == k) indices_k.push_back(i);
+        std::vector<std::vector<int> > indices;
+        for (int k = 0; k < K; k++)
+        {
+            std::vector<int> indices_k;
+            for (int i = 0; i < labels.rows; i++)
+                if (labels.at<int>(i,0) == k) indices_k.push_back(i);
 
-          auto rng = std::default_random_engine {};
-          std::shuffle(indices_k.begin(), indices_k.end(), rng);
-          indices.push_back(indices_k);
-      }
+            auto rng = std::default_random_engine {};
+            std::shuffle(indices_k.begin(), indices_k.end(), rng);
+            indices.push_back(indices_k);
+        }
             
-      // Interactive selection procedure
+        // Interactive selection procedure
 
-      std::vector<cv::Mat> corners_tmp_1 (K), corners_tmp_2 (K);
-      std::vector<std::string> corner_frames_tmp_1 (K), corner_frames_tmp_2 (K);
-      std::vector<int> ptr (K);
-      
-      int k = 0;
-      while (true)
-      {
-          // Print current frame
-          std::cout << k << ":" << ptr[k]+1 << "/" << indices[k].size() << std::endl;
+        std::vector<cv::Mat> corners_tmp_1 (K), corners_tmp_2 (K);
+        std::vector<std::string> corner_frames_tmp_1 (K), corner_frames_tmp_2 (K);
+        std::vector<int> ptr (K);
+        
+        int k = 0;
+        while (true)
+        {
+            // Print current frame
+            std::cout << k << ":" << ptr[k]+1 << "/" << indices[k].size() << std::endl;
 
-          // Get current frame's shuffled index
-          int idx = indices[k][ptr[k]]; //indices_k.at<int>(i,0);
+            // Get current frame's shuffled index
+            int idx = indices[k][ptr[k]]; //indices_k.at<int>(i,0);
 
-          // Corners were detected in a different smaller/larger image resolution? Transform point domain space
-          cv::Mat corners_row_1_transf, corners_row_2_transf;
-          cv::Size frame_size_transf;
-          uls::homogeneize_2d_domains(corners_all_1.row(idx), corners_all_2.row(idx), 
-                                      frame_size_1, frame_size_2, 
-                                      corners_row_1_transf, corners_row_2_transf, frame_size_transf);
+            // Corners were detected in a different smaller/larger image resolution? Transform point domain space
+            cv::Mat corners_row_1_transf, corners_row_2_transf;
+            cv::Size frame_size_transf;
+            uls::homogeneize_2d_domains(corners_all_1.row(idx), corners_all_2.row(idx), 
+                                        frame_size_1, frame_size_2, 
+                                        corners_row_1_transf, corners_row_2_transf, frame_size_transf);
 
-          // Read images
-          cv::Mat img_1;
-          if (modality_1 == "Color")
-              img_1 = uls::ColorFrame(fs::path(frames_all_1[idx]), frame_size_transf, y_shift_1).mat();
-          else if (modality_1 == "Thermal")
-              img_1 = uls::ThermalFrame(fs::path(frames_all_1[idx]), frame_size_transf, y_shift_2).mat();
+            // Read images
+            //cv::Mat img_1;
+            //if (modality_1 == "Color")
+            //    img_1 = uls::ColorFrame(fs::path(frames_all_1[idx]), frame_size_transf).get();
+            //else if (modality_1 == "Thermal")
+            //    img_1 = uls::ThermalFrame(fs::path(frames_all_1[idx]), frame_size_transf).get();
 
-          cv::Mat img_2;
-          if (modality_2 == "Color")
-              img_2 = uls::ColorFrame(fs::path(frames_all_2[idx]), frame_size_transf, y_shift_1).mat();
-          else if (modality_2 == "Thermal")
-              img_2 = uls::ThermalFrame(fs::path(frames_all_2[idx]), frame_size_transf, y_shift_2).mat();
+            //cv::Mat img_2;
+            //if (modality_2 == "Color")
+            //    img_2 = uls::ColorFrame(fs::path(frames_all_2[idx]), frame_size_transf).get();
+            //else if (modality_2 == "Thermal")
+            //    img_2 = uls::ThermalFrame(fs::path(frames_all_2[idx]), frame_size_transf).get();
+            cv::Mat img_1 = cv::imread(frames_all_1[idx], cv::IMREAD_UNCHANGED);
+            cv::Mat img_2 = cv::imread(frames_all_2[idx], cv::IMREAD_UNCHANGED);
+            
+            if (modality_1 == "pt/thermal" )
+                uls::thermal_to_8bit(img_1, img_1, cv::Rect(), cv::COLORMAP_BONE);
+            else if (modality_2 == "pt/thermal")
+                uls::thermal_to_8bit(img_2, img_2, cv::Rect(), cv::COLORMAP_BONE);
 
-          cv::cvtColor(img_1, img_1, cv::COLOR_GRAY2BGR);
-          cv::cvtColor(img_2, img_2, cv::COLOR_GRAY2BGR);
+            uls::resize(img_1, img_1, frame_size_transf);
+            uls::resize(img_2, img_2, frame_size_transf);
 
-          // IF one the two patterns is smaller by an integer: (P1.width,P2.height) & (P2.width,P2.height),  
-          // where P1.width == (P2.width - L) and P1.height ==  (P2.height - L). Get the intersection of both.
-          cv::Mat corners_row_1_aligned, corners_row_2_aligned;
-          cv::Size pattern_size_tmp;
-          uls::intersect_patterns(corners_row_1_transf, corners_row_2_transf, 
-                                  pattern_size_1, pattern_size_2, 
-                                  corners_row_1_aligned, corners_row_2_aligned, pattern_size_tmp);
+            // cv::cvtColor(img_1, img_1, cv::COLOR_GRAY2BGR);
+            // cv::cvtColor(img_2, img_2, cv::COLOR_GRAY2BGR);
+
+            // IF one the two patterns is smaller by an integer: (P1.width,P2.height) & (P2.width,P2.height),  
+            // where P1.width == (P2.width - L) and P1.height ==  (P2.height - L). Get the intersection of both.
+            cv::Mat corners_row_1_aligned, corners_row_2_aligned;
+            cv::Size pattern_size_tmp;
+            uls::intersect_patterns(corners_row_1_transf, corners_row_2_transf, 
+                                    pattern_size_1, pattern_size_2, 
+                                    corners_row_1_aligned, corners_row_2_aligned, pattern_size_tmp);
 
         //   assert (pattern_size_tmp.width == pattern_size.width && pattern_size_tmp.height == pattern_size.height);
-          pattern_size = pattern_size_tmp;
+            pattern_size = pattern_size_tmp;
 
-          // Compose the images, text, and interactions with the viewer
+            // Compose the images, text, and interactions with the viewer
 
-          std::vector<cv::Mat> tiling = {img_1, img_2};
-          cv::drawChessboardCorners(tiling[0], pattern_size, corners_row_1_aligned, true);
-          cv::drawChessboardCorners(tiling[1], pattern_size, corners_row_2_aligned, true);
+            std::vector<cv::Mat> tiling = {img_1, img_2};
+            cv::drawChessboardCorners(tiling[0], pattern_size, corners_row_1_aligned, true);
+            cv::drawChessboardCorners(tiling[1], pattern_size, corners_row_2_aligned, true);
 
-          cv::Mat img;
-          uls::tile(tiling, 800, 900, 1, 2, img);
+            cv::Mat img;
+            uls::tile(tiling, 800, 900, 1, 2, img);
 
-          std::stringstream ss;
-          if (corner_frames_tmp_1[k] == frames_all_1[idx]) ss << "[*" << k << "*]";
-          else ss << "[ " << k << " ]";
-          ss << ' ' << ptr[k] << '/' << indices[k].size(); 
-          cv::putText(img, ss.str(), cv::Point(img.cols/20.0,img.rows/20.0), cv::FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(0,0,255), 1, 8, false);
+            std::stringstream ss;
+            if (corner_frames_tmp_1[k] == frames_all_1[idx]) ss << "[*" << k << "*]";
+            else ss << "[ " << k << " ]";
+            ss << ' ' << ptr[k] << '/' << indices[k].size(); 
+            cv::putText(img, ss.str(), cv::Point(img.cols/20.0,img.rows/20.0), cv::FONT_HERSHEY_COMPLEX_SMALL, 1, cv::Scalar(0,0,255), 1, 8, false);
 
-          // Show viewer
+            // Show viewer
 
-          cv::imshow("Viewer", img);
-          char ret = cv::waitKey();
+            cv::imshow("Viewer", img);
+            char ret = cv::waitKey();
 
-          //
-          // Interact with viewer. Controls:
-          // 
-          //  "j": go back one frame within that cluster
-          //  ";": go forwared one frame within that same cluster
-          //  "k": move to previous cluster
-          //  "l"/SPACE: move to next one cluster
-          //  ENTER: select that frame as representative for the current cluster (marked with asterisks in the top-left text in the Viewer) and move to next cluster.
-          //         As if "k" was pressed. Important: if the frame was already selected, it removes the selection.
-          //  ESC: finish selecting frames (ideally, you must chose as much as possible)
-          //
+            //
+            // Interact with viewer. Controls:
+            // 
+            //  "j": go back one frame within that cluster
+            //  ";": go forwared one frame within that same cluster
+            //  "k": move to previous cluster
+            //  "l"/SPACE: move to next one cluster
+            //  ENTER: select that frame as representative for the current cluster (marked with asterisks in the top-left text in the Viewer) and move to next cluster.
+            //         As if "k" was pressed. Important: if the frame was already selected, it removes the selection.
+            //  ESC: finish selecting frames (ideally, you must chose as much as possible)
+            //
 
-          if (ret == 'j')
-              ptr[k] = (ptr[k] > 0) ? ptr[k] - 1 : ptr[k];
-          else if (ret == ';')
-              ptr[k] = (ptr[k] < (indices[k].size() - 1)) ? ptr[k] + 1 : ptr[k];
-          else if (ret == 'k')
-          {
-              k = (k > 0) ? k - 1 : K-1;
-          }
-          else if (ret == 'l' || ret == ' ')
-              k = (k < (K - 1)) ? k + 1 : 0;
-          else if (ret == 13) 
-          {
-              // ENTER
-              if (corner_frames_tmp_1[k] == frames_all_1[idx])
-              {
-                  corner_frames_tmp_1[k] = corner_frames_tmp_2[k] = std::string();
-                  corners_tmp_1[k] = corners_tmp_2[k] = cv::Mat();
-              }
-              else
-              {
-                  corners_tmp_1[k] = corners_row_1_aligned;// corners_all_1.row(idx);
-                  corners_tmp_2[k] = corners_row_2_aligned;//corners_all_2.row(idx);
-                  corner_frames_tmp_1[k] = frames_all_1[idx];
-                  corner_frames_tmp_2[k] = frames_all_2[idx];
-                  k = (k < (K - 1)) ? k + 1 : 0;
-              }
-          }
-          else if (ret == 27)
-              break;
-      }
+            if (ret == 'j')
+                ptr[k] = (ptr[k] > 0) ? ptr[k] - 1 : ptr[k];
+            else if (ret == ';')
+                ptr[k] = (ptr[k] < (indices[k].size() - 1)) ? ptr[k] + 1 : ptr[k];
+            else if (ret == 'k')
+            {
+                k = (k > 0) ? k - 1 : K-1;
+            }
+            else if (ret == 'l' || ret == ' ')
+                k = (k < (K - 1)) ? k + 1 : 0;
+            else if (ret == 13) 
+            {
+                // ENTER
+                if (corner_frames_tmp_1[k] == frames_all_1[idx])
+                {
+                    corner_frames_tmp_1[k] = corner_frames_tmp_2[k] = std::string();
+                    corners_tmp_1[k] = corners_tmp_2[k] = cv::Mat();
+                }
+                else
+                {
+                    corners_tmp_1[k] = corners_row_1_aligned;// corners_all_1.row(idx);
+                    corners_tmp_2[k] = corners_row_2_aligned;//corners_all_2.row(idx);
+                    corner_frames_tmp_1[k] = frames_all_1[idx];
+                    corner_frames_tmp_2[k] = frames_all_2[idx];
+                    k = (k < (K - 1)) ? k + 1 : 0;
+                }
+            }
+            else if (ret == 27)
+                break;
+        }
 
-      assert(corner_frames_tmp_1.size() == corner_frames_tmp_2.size());
+        assert(corner_frames_tmp_1.size() == corner_frames_tmp_2.size());
 
-      // Process and save to intermediate file
+        // Process and save to intermediate file
 
-      for (int k = 0; k < corner_frames_tmp_1.size(); k++)
-      {
-          if (!corner_frames_tmp_1[k].empty())
-          {
-              corners_selection_1.push_back(corners_tmp_1[k]);
-              corners_selection_2.push_back(corners_tmp_2[k]);
-              frames_selection_1.push_back(corner_frames_tmp_1[k]);
-              frames_selection_2.push_back(corner_frames_tmp_2[k]);
-          }
-      }
+        for (int k = 0; k < corner_frames_tmp_1.size(); k++)
+        {
+            if (!corner_frames_tmp_1[k].empty())
+            {
+                corners_selection_1.push_back(corners_tmp_1[k]);
+                corners_selection_2.push_back(corners_tmp_2[k]);
+                frames_selection_1.push_back(corner_frames_tmp_1[k]);
+                frames_selection_2.push_back(corner_frames_tmp_2[k]);
+            }
+        }
 
-      extrinsics_fs.open(vm["intermediate-file"].as<std::string>(), cv::FileStorage::WRITE);
-      extrinsics_fs << "pattern_size" << pattern_size;
-      extrinsics_fs << "corners_selection_1" << corners_selection_1;
-      extrinsics_fs << "corners_selection_2" << corners_selection_2;
-      extrinsics_fs << "frames_selection_1" << frames_selection_1;
-      extrinsics_fs << "frames_selection_2" << frames_selection_2;
-      extrinsics_fs.release();
+        extrinsics_fs.open(vm["intermediate-file"].as<std::string>(), cv::FileStorage::WRITE);
+        extrinsics_fs << "pattern_size" << pattern_size;
+        extrinsics_fs << "corners_selection_1" << corners_selection_1;
+        extrinsics_fs << "corners_selection_2" << corners_selection_2;
+        extrinsics_fs << "frames_selection_1" << frames_selection_1;
+        extrinsics_fs << "frames_selection_2" << frames_selection_2;
+        extrinsics_fs << "sync_delay" << vm["sync-delay"].as<int>();
+        extrinsics_fs.release();
     }
 
     // Read intrinsics to use in the calibration of extrinsics
 
-    cv::FileStorage intrinsics_fs_1 (intrinsics_file_1, cv::FileStorage::READ);
-    cv::FileStorage intrinsics_fs_2 (intrinsics_file_2, cv::FileStorage::READ);
-
+    cv::FileStorage intrinsics_fs_1, intrinsics_fs_2;
     cv::Mat camera_matrix_1, camera_matrix_2;
     cv::Mat dist_coeffs_1, dist_coeffs_2;
     cv::Point2f square_size_1, square_size_2;
-    
-    intrinsics_fs_1["camera_matrix"] >> camera_matrix_1;
-    intrinsics_fs_2["camera_matrix"] >> camera_matrix_2;
-    intrinsics_fs_1["dist_coeffs"] >> dist_coeffs_1;
-    intrinsics_fs_2["dist_coeffs"] >> dist_coeffs_2;
-    intrinsics_fs_1["square_size"] >> square_size_1;
-    intrinsics_fs_2["square_size"] >> square_size_2;
 
-    intrinsics_fs_1.release();
-    intrinsics_fs_2.release();
+    if (intrinsics_fs_1.open(intrinsics_file_1, cv::FileStorage::READ)
+        && intrinsics_fs_2.open(intrinsics_file_2, cv::FileStorage::READ))
+    {
+        intrinsics_fs_1["camera_matrix"] >> camera_matrix_1;
+        intrinsics_fs_2["camera_matrix"] >> camera_matrix_2;
+        intrinsics_fs_1["dist_coeffs"] >> dist_coeffs_1;
+        intrinsics_fs_2["dist_coeffs"] >> dist_coeffs_2;
+        intrinsics_fs_1["square_size"] >> square_size_1;
+        intrinsics_fs_2["square_size"] >> square_size_2;
+
+        intrinsics_fs_1.release();
+        intrinsics_fs_2.release();
+    }
 
     assert(square_size_1.x == square_size_2.x && square_size_1.y == square_size_2.y);
 
@@ -752,7 +515,7 @@ int main(int argc, char * argv[]) try
                                      image_points_1, image_points_2, 
                                      camera_matrix_1, dist_coeffs_1, 
                                      camera_matrix_2, dist_coeffs_2,
-                                     cv::Size(1280, 720+abs(y_shift_1)),
+                                     cv::Size(1280, 720),
                                      R, T, E, F,
                                      flags,
                                      cv::TermCriteria(cv::TermCriteria::MAX_ITER+cv::TermCriteria::EPS, 100, 1e-5));
@@ -766,16 +529,17 @@ int main(int argc, char * argv[]) try
         extrinsics_fs << "modality-1" << modality_1;
         extrinsics_fs << "modality-2" << modality_2;
 
-        extrinsics_fs << "camera_matrix_1" << camera_matrix_1;
-        extrinsics_fs << "camera_matrix_2" << camera_matrix_2;
-        extrinsics_fs << "dist_coeffs_1" << dist_coeffs_1;
-        extrinsics_fs << "dist_coeffs_2" << dist_coeffs_2;
+        extrinsics_fs << "camera_matrix-1" << camera_matrix_1;
+        extrinsics_fs << "camera_matrix-2" << camera_matrix_2;
+        extrinsics_fs << "dist_coeffs-1" << dist_coeffs_1;
+        extrinsics_fs << "dist_coeffs-2" << dist_coeffs_2;
 
         extrinsics_fs << "R" << R;
         extrinsics_fs << "T" << T;
         extrinsics_fs << "E" << E;
         extrinsics_fs << "F" << F;
 
+        extrinsics_fs << "sync_delay" << vm["sync-delay"].as<int>();
         extrinsics_fs << "flags" << flags;
         extrinsics_fs << "rms" << rms;
 
