@@ -186,7 +186,7 @@ namespace uls
     void thermal_to_8bit(cv::Mat src, 
                          cv::Mat & dst,
                          cv::Rect roi = cv::Rect(),
-                         int colorMap = cv::COLORMAP_JET)
+                         int colorMap = -1)
     {
         assert(src.type() == CV_16UC1);
         
@@ -207,7 +207,22 @@ namespace uls
         dst.setTo(0);
         tmp.convertTo(dst(roi), CV_8UC1);
 
-        applyColorMap(dst, dst, colorMap);
+        if (colorMap > 0)
+            applyColorMap(dst, dst, colorMap);
+    }
+
+    cv::Mat thermal_to_8bit(cv::Mat src)
+    {
+        cv::Mat dst;
+        thermal_to_8bit(src, dst, cv::Rect(), -1);
+        return dst;
+    }
+
+    cv::Mat color_to_8bit(cv::Mat src)
+    {
+        cv::Mat dst;
+        cv::cvtColor(src, dst, cv::COLOR_BGR2GRAY);
+        return dst;
     }
 
     void depth_to_8bit(cv::Mat src, cv::Mat & dst, int colorMap = cv::COLORMAP_BONE, bool invertMap = true)
@@ -819,6 +834,30 @@ namespace uls
     bool is_bar(char c)
     {
         return c == '/' || c == '\\';
+    }
+
+    std::string type2str(int type) 
+    {
+        std::string r;
+
+        uchar depth = type & CV_MAT_DEPTH_MASK;
+        uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+        switch ( depth ) {
+            case CV_8U:  r = "8U"; break;
+            case CV_8S:  r = "8S"; break;
+            case CV_16U: r = "16U"; break;
+            case CV_16S: r = "16S"; break;
+            case CV_32S: r = "32S"; break;
+            case CV_32F: r = "32F"; break;
+            case CV_64F: r = "64F"; break;
+            default:     r = "User"; break;
+        }
+
+        r += "C";
+        r += (chans+'0');
+
+        return r;
     }
 }
 

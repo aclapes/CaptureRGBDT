@@ -40,8 +40,8 @@ void find_chessboard_corners(std::vector<std::string> frames,
                              std::vector<cv::Mat> & frames_corners,
                              std::vector<int> & frames_inds,
                              cv::Size resize_dims = cv::Size(),
-                             std::string prefix = "",
-                            //  int y_shift = 0,
+                            //  std::string prefix = "",
+                             std::function<cv::Mat(cv::Mat)> preprocessing_func = {},
                              bool verbose = true) 
 {
     frames_corners.clear();
@@ -53,28 +53,42 @@ void find_chessboard_corners(std::vector<std::string> frames,
 
     for (int i = 0; i < frames.size(); i++) 
     {
-        /* read and preprocess frame */
-        // cv::Mat img = T(fs::path(prefix) / fs::path(frames[i]), resize_dims).get();
-        cv::Mat img = cv::imread((fs::path(prefix) / fs::path(frames[i])).string(), cv::IMREAD_UNCHANGED);
+        // read and preprocess frame
+        cv::Mat img = cv::imread(frames[i], cv::IMREAD_UNCHANGED);
+
+        // depending on the modality you might need to preprocess the images somehow,
+        // e.g. normalization and conversion to 8 bits
+        if (preprocessing_func)
+            img = preprocessing_func(img);
+            
+        // chessboard detection performs bad in very small resolution images. if that's the case
+        // resize now (always after preprocessing to avoid 0-paddings in the normalization within
+        // the preprocessing function
         uls::resize(img, img, resize_dims);
 
+        cv::Mat img_gray;
+        if (img.channels() == 3)
+            cv::cvtColor(img, img_gray, cv::COLOR_BGR2GRAY);
+        else
+            img_gray = img.clone();
+
+        // find the corners
         corners.release();
-        // cv::GaussianBlur(fra, img, cv::Size(0, 0), 3);
-        // cv::addWeighted(fra, 1.5, img, -0.5, 0, img);
         bool chessboard_found = findChessboardCorners(img, pattern_size, corners, cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE);
         
+        // if corners find...
         if (chessboard_found) 
         {
-            cornerSubPix(img, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 1e-1));
+            cornerSubPix(img_gray, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 1e-1));
             tracking_enabled = true;
         }
-        else if (tracking_enabled)
+        else if (tracking_enabled) // .. if not, try to track any previously detected ones
         {
             cv::Mat status, err;
             cv::calcOpticalFlowPyrLK(img_prev, img, corners_prev, corners, status, err, cv::Size(7,7));
-            cornerSubPix(img, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 1e-1));
+            cornerSubPix(img_gray, corners, cv::Size(21, 21), cv::Size(7, 7), cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 1e-1));
             // error checking
-            if ( ! uls::check_corners_integrity(status, pattern_size) )
+            if ( ! uls::check_tracking_integrity(status, pattern_size) )  // none of the corners is lost
             {
                 tracking_enabled = false;
                 corners.release();
@@ -83,6 +97,9 @@ void find_chessboard_corners(std::vector<std::string> frames,
 
         if (tracking_enabled)
         {
+            // the first boolean condition seems redundant to check_tracking_integrity(..) Leave it since it's not hurting
+            // the second boolean condition transforms the tracked corners using a homography to a normalized 1x1 grid structure
+            // and checks the transformed corners are coherent, e.g. (0,0), (0.1, 0), (0.2, 0) ... (1,0), (0, 0.1), (0.1, 0.1), ..., (1,1)
             if ((corners.rows == pattern_size.width * pattern_size.height) && uls::check_corners_2d_positions(corners, pattern_size))
             {
                 frames_corners.push_back(corners);
@@ -98,8 +115,14 @@ void find_chessboard_corners(std::vector<std::string> frames,
         if (verbose)
         {
             cv::Mat cimg;
-            cv::cvtColor(img, cimg, cv::COLOR_GRAY2BGR);
-            if (!corners.empty()) cv::drawChessboardCorners(cimg, pattern_size, corners, chessboard_found);
+            if (img.channels() == 1)
+                cv::cvtColor(img, cimg, cv::COLOR_GRAY2BGR);
+            else
+                cimg = img.clone();
+
+            if (!corners.empty()) 
+                cv::drawChessboardCorners(cimg, pattern_size, corners, chessboard_found);
+
             cv::imshow("Viewer", cimg);
             cv::waitKey(1);
         }
@@ -129,7 +152,8 @@ int main(int argc, char * argv[]) try
         // ("intrinsics,i", po::value<std::string>()->default_value("./intrinsics.yml"), "")
         // ("modality,m", po::value<std::string>()->default_value("Thermal"), "Visual modality")
         ("input-file-or-dir", po::value<std::string>(&input_list_file_str)->required(), "File containing list of calibration sequence directories")
-        ("prefix,f", po::value<std::string>()->default_value(""), "Prefix")
+        ("prefix,f", po::value<std::string>()->required(), "Prefix")
+        ("output-file", po::value<std::string>(&output_file_str)->required(), "Output file")
         // ("log-file,l", po::value<std::string>()->default_value(""), "Log file (e.g. rs.log)")
         // ("file-ext,x", po::value<std::string>()->default_value(".jpg"), "Image file extension")
         ("pattern-size,p", po::value<std::string>()->default_value("11,8"), "Pattern size \"x,y\" squares")
@@ -138,7 +162,7 @@ int main(int argc, char * argv[]) try
         // ("verbose,v", po::bool_switch(&verbose), "Verbosity")
         ("verbose,v", po::value<int>()->default_value(0), "")
         // ("modality", po::value<std::string>(&modality_str)->required(), "Modality (either Color or Thermal)")
-        ("output-file", po::value<std::string>(&output_file_str)->required(), "Output file");
+        ;
 
     
     po::positional_options_description positional_options; 
@@ -237,14 +261,15 @@ int main(int argc, char * argv[]) try
     // list all the frames in the sequences as a hash map: (sequence_name, list_of_sequence_frame_filepaths)
 
     std::map<std::string, std::vector<std::string> > sequences;
-    for (std::string seq_dir : sequence_dirs)
+    for (std::string dir_path : sequence_dirs)
     {
-        std::vector<std::string> s = uls::list_images_in_directory(seq_dir, vm["prefix"].as<std::string>());  // lists jpg/png files
+        std::vector<std::string> s = uls::list_images_in_directory(dir_path, vm["prefix"].as<std::string>());  // lists jpg/png files
         std::sort(s.begin(), s.end());  // sort alphabetically
-        sequences[seq_dir] = s;
+        sequences[dir_path] = s;
     }
 
     cv::FileStorage fstorage (vm["output-file"].as<std::string>(), cv::FileStorage::WRITE);
+    fstorage << "nb_sequences" << ((int) sequence_dirs.size());
     fstorage << "prefix" << prefix;
     fstorage << "pattern_size" << pattern_size;
     fstorage << "resize_dims" << resize_dims;
@@ -252,9 +277,8 @@ int main(int argc, char * argv[]) try
     // fstorage << "y-shift" << vm["y-shift"].as<int>();
     // fstorage << "log-file" << vm["log-file"].as<std::string>();
     // fstorage << "file-extension" << vm["file-ext"].as<std::string>();
-    fstorage << "nb_sequences" << ((int) sequence_dirs.size());
 
-    // // std::vector<int> fids; // keep track
+    // // std::vector<int> frames_ids; // keep track
     // // boost::progress_display pd (sequences.size());
     std::map<std::string, std::vector<std::string> >::iterator it;
     int i;
@@ -262,58 +286,73 @@ int main(int argc, char * argv[]) try
 
     for (it = sequences.begin(), i = 0; it != sequences.end(); it++, i++)
     {
-        // Consistency check: all calibration sequences were captures with the same camera
-        // ---
-        cv::FileStorage fs ( (fs::path(it->first) / fs::path("rs_info.yml")).string(), cv::FileStorage::READ );
-        std::string sn;
-        if (fs.isOpened())
-            fs["serial_number"] >> sn;
+        // consistency check: same camera for all calibration sequences!
+        std::string curr_serial_number;
 
-        assert (serial_number.empty() || serial_number == sn);
-        serial_number = sn;
-        // ---
+        cv::FileStorage fs ( (fs::path(it->first) / fs::path("rs_info.yml")).string(), cv::FileStorage::READ );
+        if (fs.isOpened()) 
+        {
+            fs["serial_number"] >> curr_serial_number;
+            if (!serial_number.empty() && serial_number != curr_serial_number)
+                return EXIT_FAILURE;
+
+            serial_number = curr_serial_number;
+        }
 
         if (verbose > 0) 
             std::cout << "Processing (" << i + 1 << "/" << sequences.size() << "): " << it->first << std::endl;
         
-        std::vector<cv::Mat> corners_aux;
-        std::vector<int> fids;
-        // if (modality_str == "Color")
-        //     find_chessboard_corners<uls::ColorFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, verbose > 1);
-        // else if (modality_str == "Thermal")
-        //     find_chessboard_corners<uls::ThermalFrame>(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, verbose > 1);
-        find_chessboard_corners(it->second, pattern_size, corners_aux, fids, resize_dims, it->first, verbose > 1);
+        // find corners
+        std::vector<int> frames_ids;
+        std::vector<cv::Mat> frames_corners;
+        // find_chessboard_corners(it->second, pattern_size, frames_corners, frames_ids, resize_dims, verbose > 1);
 
-        assert(corners_aux.size() == fids.size());
+        if (prefix == "rs/color")
+            find_chessboard_corners(it->second, 
+                                    pattern_size, 
+                                    frames_corners, 
+                                    frames_ids,
+                                    resize_dims, 
+                                    // static_cast<cv::Mat(*)(cv::Mat)>(&uls::color_to_8bit),
+                                    std::function<cv::Mat(cv::Mat)>(), // preprocessing unneeded
+                                    verbose > 1);
+        else if (prefix == "pt/thermal")
+            find_chessboard_corners(it->second, 
+                                    pattern_size,
+                                    frames_corners,
+                                    frames_ids, 
+                                    resize_dims, 
+                                    static_cast<cv::Mat(*)(cv::Mat)>(&uls::thermal_to_8bit), // thermal normalization and conversion to 8-bit image
+                                    verbose > 1);
 
-        cv::Mat corners (corners_aux.size(), pattern_size.height * pattern_size.width, CV_32FC2);
-        std::vector<std::string> frames (corners_aux.size());
-        for (int k = 0; k < corners_aux.size(); k++)
+        assert(frames_corners.size() == frames_ids.size());
+
+        // data type transformation, more suitable to be stored in a YAML using a cv::FileStorage object
+        cv::Mat corners (frames_corners.size(), pattern_size.height * pattern_size.width, CV_32FC2);
+        std::vector<std::string> frames_paths (frames_corners.size());
+        for (int k = 0; k < frames_corners.size(); k++)
         {   
-            corners_aux[k].reshape(2,1).copyTo(corners.row(k));
-            frames[k] = it->second[fids[k]];
+            frames_corners[k].reshape(2,1).copyTo(corners.row(k)); // reshape to 2 channels, 1 column (the number of rows is inferred)
+            
+            if (fs::is_directory(input_p))
+                frames_paths[k] = fs::relative(it->second[frames_ids[k]], input_p).string();
+            else
+                frames_paths[k] = it->second[frames_ids[k]];
         }
 
-        std::string seq_id = std::to_string(i);
-        fstorage << ("sequence_dir-" + seq_id) << it->first;
-        fstorage << ("corners-" + seq_id) << corners;
-        fstorage << ("frames-" + seq_id) << frames;
+        std::string id = std::to_string(i);
+        fstorage << ("sequence_dir-" + id) << (fs::is_directory(input_p) ? fs::relative(it->first, input_p).string() : it->first);
+        fstorage << ("corners-" + id) << corners;
+        fstorage << ("frames-" + id)  << frames_paths;
 
         if (verbose > 0) 
-            std::cout << "Corners found in: " << frames.size() << "/" << it->second.size() << " frames\n";
+            std::cout << "Total frames containing corners: " << frames_paths.size() << "/" << it->second.size() << "\n";
     }
 
     fstorage << "serial_number" << serial_number;
-
     fstorage.release();
 
-    // // cv::Mat corners (sequence_corners.size(), pattern_size.height * pattern_size.width * 2, CV_32F);
-
-
-    // // fstorage << "corners" << corners;
-    // // fstorage << "frames" << corner_frames;
-
-    return SUCCESS;
+    return EXIT_SUCCESS;
 }
 catch(po::error& e)
 {

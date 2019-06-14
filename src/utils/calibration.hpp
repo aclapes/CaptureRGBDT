@@ -413,7 +413,7 @@ namespace uls
     * @corners_status Corner detections marked as 1 if properly detected and 0 otherwise
     * @pattern_size Size of the pattern
     */
-    bool check_corners_integrity(cv::Mat corners_status, cv::Size pattern_size)
+    bool check_tracking_integrity(cv::Mat corners_status, cv::Size pattern_size)
     {
         return pattern_size.width * pattern_size.height == cv::sum(corners_status)[0];
     }

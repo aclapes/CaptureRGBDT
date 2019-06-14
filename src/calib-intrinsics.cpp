@@ -74,6 +74,7 @@ int main(int argc, char * argv[]) try
     desc.add_options()
         ("help,h", "Print help messages")
         ("input-corners-file", po::value<std::string>(&corners_file)->required(), "Input corners file")
+        ("parent-dir", po::value<std::string>()->default_value(""), "Path containing the sequences")
         // ("corners,c", po::value<std::string>()->default_value("./corners.yml"), "")
         // ("corner-selection,s", po::value<std::string>()->default_value("./corner-selection.yml"), "")
         // ("intrinsics,i", po::value<std::string>()->default_value("./intrinsics.yml"), "")
@@ -120,6 +121,10 @@ int main(int argc, char * argv[]) try
     {
         std::string sequence_dir;
         corners_fs["sequence_dir-" + std::to_string(i)] >> sequence_dir;
+
+        fs::path sequence_path (sequence_dir);
+        if (sequence_path.is_relative())
+            sequence_path = fs::path(vm["parent-dir"].as<std::string>()) / sequence_path;
 
         std::vector<std::string> frames;
         corners_fs["frames-" + std::to_string(i)] >> frames;
