@@ -747,7 +747,7 @@ namespace uls
                 if (!m.empty())
                 {
                     // assert(m.type() == dst.type());
-                    if (m.type() != CV_8UC3)
+                    if (m.channels() != 3)
                         cv::cvtColor(m, m, cv::COLOR_GRAY2BGR);
 
                     if ( (((float) m.cols) / m.rows) < aspect_ratio)

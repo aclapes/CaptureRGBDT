@@ -1,6 +1,3 @@
-// License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
-
 #include <iostream>
 #include <chrono>
 #include <thread>
@@ -40,7 +37,6 @@ void find_chessboard_corners(std::vector<std::string> frames,
                              std::vector<cv::Mat> & frames_corners,
                              std::vector<int> & frames_inds,
                              cv::Size resize_dims = cv::Size(),
-                            //  std::string prefix = "",
                              std::function<cv::Mat(cv::Mat)> preprocessing_func = {},
                              bool verbose = true) 
 {
@@ -140,7 +136,8 @@ int main(int argc, char * argv[]) try
     /* -------------------------------- */
     
     std::string input_list_file_str;
-    std::string modality_str;
+    // std::string modality_str; // sub by prefix
+    std::string prefix;
     std::string output_file_str;
     int verbose;
 
@@ -152,11 +149,11 @@ int main(int argc, char * argv[]) try
         // ("intrinsics,i", po::value<std::string>()->default_value("./intrinsics.yml"), "")
         // ("modality,m", po::value<std::string>()->default_value("Thermal"), "Visual modality")
         ("input-file-or-dir", po::value<std::string>(&input_list_file_str)->required(), "File containing list of calibration sequence directories")
-        ("prefix,f", po::value<std::string>()->required(), "Prefix")
+        ("prefix,p", po::value<std::string>(&prefix)->required(), "Prefix")
         ("output-file", po::value<std::string>(&output_file_str)->required(), "Output file")
         // ("log-file,l", po::value<std::string>()->default_value(""), "Log file (e.g. rs.log)")
         // ("file-ext,x", po::value<std::string>()->default_value(".jpg"), "Image file extension")
-        ("pattern-size,p", po::value<std::string>()->default_value("11,8"), "Pattern size \"x,y\" squares")
+        ("pattern-size,s", po::value<std::string>()->default_value("11,8"), "Pattern size \"x,y\" squares")
         ("resize-dims,r", po::value<std::string>()->default_value("960,720"), "Resize frame to (h,w)")
         //  ("y-shift,y", po::value<int>()->default_value(0), "Y-shift")
         // ("verbose,v", po::bool_switch(&verbose), "Verbosity")
@@ -203,7 +200,6 @@ int main(int argc, char * argv[]) try
     cv::Size pattern_size (x,y);
 
     // read prefix directory for this particular modality from po, e.g. rs/color, rs/depth, or pt/thermal
-    std::string prefix = vm["prefix"].as<std::string>();
     boost::trim_if(prefix, &uls::is_bar);  // remove leading and tailing '/' and '\' bars
 
     // read image resize dimensions from po, e.g 1280,720,
@@ -286,17 +282,20 @@ int main(int argc, char * argv[]) try
 
     for (it = sequences.begin(), i = 0; it != sequences.end(); it++, i++)
     {
-        // consistency check: same camera for all calibration sequences!
-        std::string curr_serial_number;
-
         cv::FileStorage fs ( (fs::path(it->first) / fs::path("rs_info.yml")).string(), cv::FileStorage::READ );
-        if (fs.isOpened()) 
+        if (fs.isOpened())
         {
+            std::string curr_serial_number;
             fs["serial_number"] >> curr_serial_number;
-            if (!serial_number.empty() && serial_number != curr_serial_number)
-                return EXIT_FAILURE;
 
-            serial_number = curr_serial_number;
+            if (serial_number.empty())
+                serial_number = curr_serial_number;
+            else if (serial_number != curr_serial_number)
+            {
+                std::cerr << "Calibration sequences from different sensors cannot be mixed: " 
+                          << serial_number << " and " << curr_serial_number << std::endl;
+                return EXIT_FAILURE;
+            }
         }
 
         if (verbose > 0) 

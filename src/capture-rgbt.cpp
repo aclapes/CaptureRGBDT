@@ -304,14 +304,14 @@ void consume_realsense(uls::SafeQueue<rs_frame_t> & q,
                        frame_buffer_t & last_frame,
                        synchronization_t & sync, 
                        fs::path dir, 
-                       bool verbose)
+                       boost::format fmt = boost::format("%08d"),
+                       bool verbose = false)
 {
     std::vector<int> compression_params = {cv::IMWRITE_PNG_COMPRESSION, 0};
     
-    int fid = 0;
-    boost::format fmt("%08d");
     std::ofstream outfile;
 
+    int fid = 0;
     while (sync.capture) // || q.size() > 0)
     {
         rs_frame_t frame = q.dequeue(); // the queue is thread safe ...
@@ -325,18 +325,37 @@ void consume_realsense(uls::SafeQueue<rs_frame_t> & q,
 
         if (sync.save_started && !sync.save_suspended && !dir.empty())
         {
-            long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.rs.ts.time_since_epoch()).count();
-            fmt % fid;
-            outfile.open((dir / "rs.log").string(), std::ios_base::app);
-            outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
-            outfile.close();
+            // long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.rs.ts.time_since_epoch()).count();
+            // fmt % fid;
+            // outfile.open((dir / "rs/color.log").string(), std::ios_base::app);
+            // outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
+            // outfile.close();
 
-            fs::path color_dir = dir / "rs/color/";
-            fs::path depth_dir = dir / "rs/depth/";
+            // fs::path color_dir = dir / "rs/color/";
+            // fs::path depth_dir = dir / "rs/depth/";
+            // if (!last_frame.rs.img_c.empty())
+            //     cv::imwrite((color_dir / ("c_" + fmt.str() + ".jpg")).string(), last_frame.rs.img_c.clone());
+            // if (!last_frame.rs.img_d.empty())
+            //     cv::imwrite((depth_dir / ("d_" + fmt.str() + ".png")).string(), last_frame.rs.img_d.clone(), compression_params);
+            std::string color_file = "c_" + fmt.str() + ".jpg";
+            std::string depth_file = "d_" + fmt.str() + ".png";
+
+            int64_t time_rs = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.rs.ts.time_since_epoch()).count();
+            
             if (!last_frame.rs.img_c.empty())
-                cv::imwrite((color_dir / ("c_" + fmt.str() + ".jpg")).string(), last_frame.rs.img_c.clone());
+            {
+                outfile.open((dir / "rs/color.log").string(), std::ios_base::app);
+                outfile << color_file << ',' << std::to_string(time_rs) << '\n';
+                outfile.close();
+                cv::imwrite((dir / "rs/color/" / color_file).string(), last_frame.rs.img_c);
+            }
             if (!last_frame.rs.img_d.empty())
-                cv::imwrite((depth_dir / ("d_" + fmt.str() + ".png")).string(), last_frame.rs.img_d.clone(), compression_params);
+            {
+                outfile.open((dir / "rs/depth.log").string(), std::ios_base::app);
+                outfile << depth_file << ',' << std::to_string(time_rs) << '\n';
+                outfile.close();
+                cv::imwrite((dir / "rs/depth/" / depth_file).string(), last_frame.rs.img_d, compression_params);
+            }
         }
 
         fid++;
@@ -362,17 +381,17 @@ void consume_purethermal(uls::SafeQueue<pt_frame_t> & q,
                          synchronization_t & sync, 
                          fs::path dir, 
                         //  uls::MovementDetector md, 
-                         bool verbose)
+                         boost::format fmt = boost::format("%08d"),
+                         bool verbose = false)
 {
     std::vector<int> compression_params = {cv::IMWRITE_PNG_COMPRESSION, 0};
     
-    int fid = 0;
-    boost::format fmt("%08d");
     std::ofstream outfile;
     
-    auto start = std::chrono::steady_clock::now();
-    cv::Mat capture_img_prev;
+    // auto start = std::chrono::steady_clock::now();
+    // cv::Mat capture_img_prev;
 
+    int fid = 0;
     while (sync.capture) // || q.size() > 0)
     {
         pt_frame_t frame = q.dequeue(); // q is thread safe
@@ -386,14 +405,23 @@ void consume_purethermal(uls::SafeQueue<pt_frame_t> & q,
 
         if (sync.save_started && !sync.save_suspended && !dir.empty())
         {
-            long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.pt.ts.time_since_epoch()).count();
+            std::string thermal_file = "t_" + fmt.str() + ".png";
+
+            int64_t time_pt = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.pt.ts.time_since_epoch()).count();
             fmt % fid;
-            outfile.open((dir / "pt.log").string(), std::ios_base::app);
-            outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
+            outfile.open((dir / "pt/thermal.log").string(), std::ios_base::app);
+            outfile << thermal_file << ',' << std::to_string(time_pt) << '\n';
             outfile.close();
+
+            cv::imwrite((dir / "pt/thermal/" / thermal_file).string(), last_frame.pt.img, compression_params);
+            // long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.pt.ts.time_since_epoch()).count();
+            // fmt % fid;
+            // outfile.open((dir / "pt/thermal.log").string(), std::ios_base::app);
+            // outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
+            // outfile.close();
             
-            fs::path thermal_dir = dir / "pt/thermal/";
-            cv::imwrite((thermal_dir / ("t_" + fmt.str() + ".png")).string(), last_frame.pt.img, compression_params);
+            // fs::path thermal_dir = dir / "pt/thermal/";
+            // cv::imwrite((thermal_dir / ("t_" + fmt.str() + ".png")).string(), last_frame.pt.img, compression_params);
         }
 
         fid++;
@@ -534,18 +562,18 @@ void consume(uls::SafeQueue<std::pair<rs_frame_t,pt_frame_t> > & q,
             //  uls::MovementDetector md, 
             //  int duration,
              int64_t delay,
-             bool verbose)
+             boost::format fmt = boost::format("%08d"),
+             bool verbose = false)
 {
     std::vector<int> compression_params = {cv::IMWRITE_PNG_COMPRESSION, 0};
     
-    int fid = 0;
-    boost::format fmt("%08d");
     std::ofstream outfile;
     
     auto start = std::chrono::steady_clock::now();
     cv::Mat capture_img_prev;
 
     // std::vector<rs_frame_t> buffer;
+    int fid = 0;
     while (sync.capture) try
     {
         std::pair<rs_frame_t,pt_frame_t> capture = q.dequeue();
@@ -556,19 +584,39 @@ void consume(uls::SafeQueue<std::pair<rs_frame_t,pt_frame_t> > & q,
         
         if (sync.save_started && !sync.save_suspended && !dir.empty())
         {
-            int64_t time_pt = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.pt.ts.time_since_epoch()).count();
-            fmt % fid;
-            outfile.open((dir / "pt.log").string(), std::ios_base::app);
-            outfile << fmt.str() << ',' << std::to_string(time_pt) << '\n';
-            outfile.close();
             int64_t time_rs = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.rs.ts.time_since_epoch()).count();
-            outfile.open((dir / "rs.log").string(), std::ios_base::app);
-            outfile << fmt.str() << ',' << std::to_string(time_rs) << '\n';
+
+            if (!last_frame.rs.img_c.empty())
+            {
+                std::string color_file = "c_" + fmt.str() + ".jpg";
+
+                outfile.open((dir / "rs/color.log").string(), std::ios_base::app);
+                outfile << color_file << ',' << std::to_string(time_rs) << '\n';
+                outfile.close();
+
+                cv::imwrite((dir / "rs/color/" / color_file).string(), last_frame.rs.img_c);
+            }
+
+            if (!last_frame.rs.img_d.empty())
+            {
+                std::string depth_file = "d_" + fmt.str() + ".png";
+
+                outfile.open((dir / "rs/depth.log").string(), std::ios_base::app);
+                outfile << depth_file << ',' << std::to_string(time_rs) << '\n';
+                outfile.close();
+
+                cv::imwrite((dir / "rs/depth/" / depth_file).string(), last_frame.rs.img_d, compression_params);
+            }
+
+            int64_t time_pt = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.pt.ts.time_since_epoch()).count();
+
+            std::string thermal_file = "t_" + fmt.str() + ".png";
+
+            outfile.open((dir / "pt/thermal.log").string(), std::ios_base::app);
+            outfile << thermal_file << ',' << std::to_string(time_pt) << '\n';
             outfile.close();
-            
-            cv::imwrite((dir / "pt/thermal/" / ("t_" + fmt.str() + ".png")).string(), last_frame.pt.img, compression_params);
-            cv::imwrite((dir / "rs/color/" / ("c_" + fmt.str() + ".jpg")).string(), last_frame.rs.img_c);
-            cv::imwrite((dir / "rs/depth/" / ("d_" + fmt.str() + ".png")).string(), last_frame.rs.img_d, compression_params);
+
+            cv::imwrite((dir / "pt/thermal/" / thermal_file).string(), last_frame.pt.img, compression_params);
         }
             
         fid++;
@@ -842,7 +890,7 @@ void visualizer(std::string win_name,
 
         // tile the images of the different modalites
         cv::Mat tiling;
-        uls::tile(frames, 1920, 1080, 2, 2, tiling); // in a 2x2 grid
+        uls::tile(frames, 1280, 720, 2, 2, tiling); // in a 2x2 grid
         if (sync.save_started && !sync.save_suspended) // when frames are consumed, show red rectangle around the tiling
             cv::rectangle(tiling, cv::Rect(0, 0, tiling.cols, tiling.rows), cv::Scalar(0,0,255), 10);
 
@@ -863,11 +911,6 @@ void visualizer(std::string win_name,
     }
 }
 
-/* -------------------------------- */
-/*                                  */
-/*            MAIN CODE             */
-/*            *********             */
-/* -------------------------------- */
 
 int main(int argc, char * argv[]) try
 {    
@@ -892,6 +935,7 @@ int main(int argc, char * argv[]) try
         ("md-frame-ratio", po::value<float>()->default_value(0.01), "When movement detected record during X millisecs")
         ("hide-rgb,", po::bool_switch(&hide_rgb), "Hide RGB modality")
         ("verbosity,v", po::value<int>()->default_value(0), "Verbosity level (0: nothing | 1: countdown & output | 2: sections | 3: threads | 4: rs internals)")
+        ("filename-fmt,", po::value<std::string>()->default_value("%08d"), "Output filename incremental identifier format.")
         ("output-dir,o", po::value<std::string>()->default_value(""), "Output directory to save acquired data");
     
     po::variables_map vm;
@@ -926,9 +970,7 @@ int main(int argc, char * argv[]) try
     if (verbosity > 4) 
         rs2::log_to_console(RS2_LOG_SEVERITY_DEBUG);
 
-    /* 
-     * Define input modalities
-     */
+    /* Define input modalities */
 
     int modality_flags = 0;
 
@@ -943,9 +985,7 @@ int main(int argc, char * argv[]) try
     
     assert(modality_flags > 0);
 
-    /*
-     * Define chessboard search in Color/Thermal modalities
-     */
+    /* Define chessboard search in Color/Thermal modalities */
 
     int find_pattern_flags = 0;
 
@@ -959,9 +999,7 @@ int main(int argc, char * argv[]) try
             find_pattern_flags |= FIND_PATTERN_ON_THERM;
     }
 
-    /*
-     * Define calibration pattern size
-     *///
+    /* Define calibration pattern size */
 
     std::vector<std::string> pattern_dims;
     boost::split(pattern_dims, vm["pattern"].as<std::string>(), boost::is_any_of(","));
@@ -973,7 +1011,6 @@ int main(int argc, char * argv[]) try
 
     cv::Size pattern_size (x,y);
 
-    // bool calibrate = false;
     std::shared_ptr<std::map<std::string,uls::intrinsics_t> > intrinsics;
     std::shared_ptr<uls::extrinsics_t> extrinsics;
     if (!vm["calibration-params"].as<std::string>().empty())
@@ -997,9 +1034,7 @@ int main(int argc, char * argv[]) try
         }
     }
 
-    /*
-     * Initialize devices
-     */
+    /* Initialize devices */
     if (verbosity > 1) 
         std::cout << "[Main] Initializing devices ...\n";
 
@@ -1034,9 +1069,7 @@ int main(int argc, char * argv[]) try
     // Countdown
     countdown<std::chrono::seconds>(2, 1, verbosity > 3); // sleep for 3 second and print a message every 1 second
 
-    /*
-     * Create output directory structures to store captured data
-     */
+    /* Create output directory structures to store captured data */
 
     std::string date_and_time = uls::current_time_and_date();
 
@@ -1173,7 +1206,8 @@ int main(int argc, char * argv[]) try
                     std::ref(sync), 
                     parent, 
                     // vm["md-duration"].as<int>(), 
-                    vm["sync-delay"].as<int>(), 
+                    vm["sync-delay"].as<int>(),
+                    boost::format(vm["filename-fmt"].as<std::string>()),
                     verbosity > 2);
     }
     else if (modality_flags & (USE_COLOR | USE_DEPTH))
@@ -1184,6 +1218,7 @@ int main(int argc, char * argv[]) try
                             std::ref(sync),
                             parent, 
                             // vm["md-duration"].as<int>(), 
+                            boost::format(vm["filename-fmt"].as<std::string>()),
                             verbosity > 2);
     }
     else
@@ -1194,6 +1229,7 @@ int main(int argc, char * argv[]) try
                             std::ref(sync), 
                             parent,
                             // vm["md-duration"].as<int>(), 
+                            boost::format(vm["filename-fmt"].as<std::string>()),
                             verbosity > 2);
     }
 
