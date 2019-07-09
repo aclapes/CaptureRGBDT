@@ -72,16 +72,6 @@ int main(int argc, char * argv[]) try
         ("help,h", "Print help messages")
         ("corners-file", po::value<std::string>(&corners_filepath)->required(), "Input corners file")
         ("intrinsics-file", po::value<std::string>(&intrinsics_filepath)->required(), "Output file containing intrinsics")
-        // ("corners,c", po::value<std::string>()->default_value("./corners.yml"), "")
-        // ("corner-selection,s", po::value<std::string>()->default_value("./corner-selection.yml"), "")
-        // ("intrinsics,i", po::value<std::string>()->default_value("./intrinsics.yml"), "")
-        // ("modality,m", po::value<std::string>()->default_value("Thermal"), "Visual modality")
-        // ("preffix,F", po::value<std::string>()->default_value(""), "Image file extension")
-        // ("file-ext,x", po::value<std::string>()->default_value(".jpg,.jpg"), "Image file extension")
-        // ("pattern,p", po::value<std::string>()->default_value("8,9"), "Pattern size \"x,y\" squares")
-        // ("verbose,v", po::bool_switch(&verbose), "Verbosity")
-        // ("input-dir-list", po::value<std::string>(&input_dir_list_str)->required(), "File containing list of calibration sequence directories")
-        // ("prefixes", po::value<std::string>(&prefixes_str)->required(), "Prefixes");
         ("parent-dir", po::value<std::string>()->default_value(""), "Path containing the sequences")
         ("square-size,q", po::value<std::string>()->default_value("0.05,0.05"), "Square size in meters")
         ("nb-clusters,k", po::value<int>()->default_value(50), "Number of k-means clusters");
@@ -118,7 +108,7 @@ int main(int argc, char * argv[]) try
 
     std::string prefix;
     corners_fs["prefix"] >> prefix;
-    // boost::trim_if(prefix, &uls::is_bar);  // remove leading and ending '/' and '\' bars
+    boost::trim_if(prefix, &uls::is_bar);  // remove leading and ending '/' and '\' bars
 
     std::string serial_number; // sensor's serial number
     corners_fs["serial_number"] >> serial_number;

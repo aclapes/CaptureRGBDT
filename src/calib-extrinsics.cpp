@@ -146,32 +146,23 @@ int main(int argc, char * argv[]) try
     po::options_description desc("Program options");
     desc.add_options()
         ("help,h", "Print help messages")
-        ("corners_file-1", po::value<std::string>(&corners_filepath_1)->required(), "")
-        ("corners_file-2", po::value<std::string>(&corners_filepath_2)->required(), "")
-        ("intrinsics_file-1", po::value<std::string>(&intrinsics_filepath_1)->required(), "")
-        ("intrinsics_file-2", po::value<std::string>(&intrinsics_filepath_2)->required(), "")
-        ("extrinsics_file", po::value<std::string>(&extrinsics_filepath)->required(), "")
+        ("corners-file-1", po::value<std::string>(&corners_filepath_1)->required(), "")
+        ("corners-file-2", po::value<std::string>(&corners_filepath_2)->required(), "")
+        ("intrinsics-file-1", po::value<std::string>(&intrinsics_filepath_1)->required(), "")
+        ("intrinsics-file-2", po::value<std::string>(&intrinsics_filepath_2)->required(), "")
+        ("extrinsics-file", po::value<std::string>(&extrinsics_filepath)->required(), "")
         ("intermediate-file,e", po::value<std::string>()->default_value(""), "Intermediate file")
         ("parent-dir", po::value<std::string>()->default_value(""), "Parent directory")
-        // ("corners,c", po::value<std::string>()->default_value("./corners.yml"), "")
-        // ("corner-selection,s", po::value<std::string>()->default_value("./corner-selection.yml"), "")
-        // ("intrinsics,i", po::value<std::string>()->default_value("./intrinsics.yml"), "")
-        // ("modality,m", po::value<std::string>()->default_value("thermal"), "Visual modality")
-        // ("file-ext,x", po::value<std::string>()->default_value(".jpg"), "Image file extension")
-        // ("verbose,v", po::bool_switch(&verbose), "Verbosity")
         ("nb-clusters,k", po::value<int>()->default_value(50), "Number of k-means clusters")
-        // ("vflip,f", po::bool_switch(&vflip), "Vertical flip registered images")
         ("sync-delay", po::value<int>()->default_value(30), "Maximum time delay between RS and PT (in milliseconds)")
-        // ("output-parameters,o", po::value<std::string>()->default_value(""), "Output parameters")
         ;
 
-    
     po::positional_options_description positional_options; 
-    positional_options.add("corners_file-1", 1); 
-    positional_options.add("corners_file-2", 1); 
-    positional_options.add("intrinsics_file-1", 1); 
-    positional_options.add("intrinsics_file-2", 1); 
-    positional_options.add("extrinsics_file", 1); 
+    positional_options.add("corners-file-1", 1); 
+    positional_options.add("corners-file-2", 1); 
+    positional_options.add("intrinsics-file-1", 1); 
+    positional_options.add("intrinsics-file-2", 1); 
+    positional_options.add("extrinsics-file", 1); 
 
     po::variables_map vm;
     po::store(po::command_line_parser(argc, argv).options(desc).positional(positional_options).run(), vm); // can throw
@@ -196,14 +187,6 @@ int main(int argc, char * argv[]) try
     std::string prefix_1, prefix_2;
     corners_fs_1["prefix"] >> prefix_1;
     corners_fs_2["prefix"] >> prefix_2;
-
-    std::string file_ext_1, file_ext_2;  // tbd
-    corners_fs_1["file-extension"] >> file_ext_1;
-    corners_fs_2["file-extension"] >> file_ext_2;
-
-    // std::string modality_1, modality_2; // tbd
-    // corners_fs_1["modality"] >> modality_1;
-    // corners_fs_2["modality"] >> modality_2;
 
     int nb_sequences_1, nb_sequences_2;
     corners_fs_1["nb_sequences"] >> nb_sequences_1;
@@ -264,23 +247,12 @@ int main(int argc, char * argv[]) try
         if (fs::path(sequence_dir_2).is_relative())
             log_filepath_2 = parent_path / log_filepath_2;
 
-        std::vector<uls::Timestamp> log_1 = uls::read_log(fs::path(sequence_dir_1) / fs::path(corners_fs_1["log-file"]));
-        std::vector<uls::Timestamp> log_2 = uls::read_log(fs::path(sequence_dir_2) / fs::path(corners_fs_2["log-file"]));
         std::vector<std::pair<uls::Timestamp,uls::Timestamp> > log_12;
         uls::time_sync(uls::read_log(log_filepath_1), uls::read_log(log_filepath_2), log_12, sync_delay);
-
-        // std::vector<int> indices_1, indices_2;
-        // uls::time_sync(uls::read_log(log_filepath_1), uls::read_log(log_filepath_2), indices_1, indices_2, sync_delay);
-        // assert(indices_1.size() == indices_2.size());
 
         std::vector<std::string> frames_1, frames_2;
         corners_fs_1["frames-" + std::to_string(i)] >> frames_1;
         corners_fs_2["frames-" + std::to_string(i)] >> frames_2;
-
-        // for (int j = 0; j < frames_1.size(); j++)
-        //     if (fs::path(frames_1[j]).is_relative) frames_1[j] = (parent_path / frames_1[j]).string();
-        // for (int j = 0; j < frames_2.size(); j++)
-        //     if (fs::path(frames_2[j]).is_relative) frames_2[j] = (parent_path / frames_2[j]).string();
 
         cv::Mat corners_1, corners_2;
         corners_fs_1["corners-" + std::to_string(i)] >> corners_1;
@@ -292,16 +264,10 @@ int main(int argc, char * argv[]) try
 
         std::map<std::string, int>::iterator it_1, it_2;
         for (int j = 0; j < log_12.size(); j++)
-        // for (int j = 0; j < indices_1.size(); j++)
         {
             fs::path frame_path_1 = fs::path(sequence_dir_1) / fs::path(prefix_1) / log_12[j].first.id;
             fs::path frame_path_2 = fs::path(sequence_dir_2) / fs::path(prefix_2) / log_12[j].second.id;
-
-            // if (frame_path_1.is_relative())
-            //     frame_path_1 = parent_path / frame_path_1;
-            // if (frame_path_2.is_relative())
-            //     frame_path_2 = parent_path / frame_path_2;
-
+            
             it_1 = map_1.find(frame_path_1.string());
             it_2 = map_2.find(frame_path_2.string());
             if (it_1 != map_1.end() && it_2 != map_2.end())
@@ -321,38 +287,6 @@ int main(int argc, char * argv[]) try
                 corners_all_1.push_back( uls::orient_corners(corners_1.row(it_1->second)) );
                 corners_all_2.push_back( uls::orient_corners(corners_2.row(it_2->second)) );
             }
-
-            // std::string key_1 = frames_1[indices_1[j]];
-            // std::string key_2 = frames_2[indices_2[j]];
-
-            // it_1 = map_1.find(key_1);
-            // it_2 = map_2.find(key_2);
-            // if (it_1 != map_1.end() && it_2 != map_2.end())
-            // {
-            //     fs::path frame_path_1, frame_path_2;
-            //     if (fs::path(frames_1[it_1->second]).is_relative())
-            //         frame_path_1 = parent_path / fs::path(frames_1[it_1->second]);
-            //     if (fs::path(frames_2[it_1->second]).is_relative())
-            //         frame_path_2 = parent_path / fs::path(frames_2[it_2->second]);
-
-            //     frames_all_1.push_back(frame_path_1.string());
-            //     frames_all_2.push_back(frame_path_2.string());
-                
-            //     // Re-orient corners so first corner is the top-left and last corner the bottom-right one
-            //     corners_all_1.push_back( uls::orient_corners(corners_1.row(it_1->second)) );
-            //     corners_all_2.push_back( uls::orient_corners(corners_2.row(it_2->second)) );
-            // }
-
-            // fs::path frame_path_1, frame_path_2;
-            // if (fs::path(frames_1[indices_1[j]]).is_relative())
-            //     frame_path_1 = parent_path /);
-            // if (fs::path(frames_2[indices_2[j]]).is_relative())
-            //     frame_path_2 = parent_path / fs::path(frames_2[indices_2[j]]);
-
-            // frames_all_1.push_back(frame_path_1.string());
-            // frames_all_2.push_back(frame_path_2.string());
-            // corners_all_1.push_back( uls::orient_corners(corners_1.row(indices_1[j])) );
-            // corners_all_2.push_back( uls::orient_corners(corners_2.row(indices_2[j])) );
         }
     }
 
@@ -565,7 +499,7 @@ int main(int argc, char * argv[]) try
         intermediate_fs << "frames_selection-1" << frames_selection_1;
         intermediate_fs << "frames_selection-2" << frames_selection_2;
         intermediate_fs << "pattern_size" << pattern_size;
-        intermediate_fs << "nb-clusters" << K;
+        intermediate_fs << "nb_clusters" << K;
         intermediate_fs << "sync_delay" << sync_delay;
         intermediate_fs.release();
     }
@@ -591,12 +525,12 @@ int main(int argc, char * argv[]) try
                                      image_points_1, image_points_2, 
                                      camera_matrix_1, dist_coeffs_1, 
                                      camera_matrix_2, dist_coeffs_2,
-                                     cv::Size(1280, 720),
+                                     resize_dims_1,
                                      R, T, E, F,
                                      flags,
                                      cv::TermCriteria(cv::TermCriteria::MAX_ITER+cv::TermCriteria::EPS, 100, 1e-5));
 
-    std::cout << "RMS error: " << rms << std::endl;
+    std::cout << "RMS: " << rms << std::endl;
 
     // save calibration results
 
@@ -604,10 +538,10 @@ int main(int argc, char * argv[]) try
 
     if (extrinsics_fs.isOpened())
     {
-        extrinsics_fs << "num_modalities" << 2;
+        extrinsics_fs << "num_prefixes" << 2;
 
-        extrinsics_fs << "modality-1" << prefix_1;
-        extrinsics_fs << "modality-2" << prefix_2;
+        extrinsics_fs << "prefix-1" << prefix_1;
+        extrinsics_fs << "prefix-2" << prefix_2;
 
         extrinsics_fs << "serial_number-1" << serial_number_1;
         extrinsics_fs << "serial_number-2" << serial_number_2;
@@ -644,4 +578,3 @@ catch (const std::exception & e)
     std::cerr << e.what() << std::endl;
     return ERROR_UNHANDLED_EXCEPTION;
 }
-

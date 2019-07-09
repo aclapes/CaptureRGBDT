@@ -325,35 +325,29 @@ void consume_realsense(uls::SafeQueue<rs_frame_t> & q,
 
         if (sync.save_started && !sync.save_suspended && !dir.empty())
         {
-            // long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.rs.ts.time_since_epoch()).count();
-            // fmt % fid;
-            // outfile.open((dir / "rs/color.log").string(), std::ios_base::app);
-            // outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
-            // outfile.close();
-
-            // fs::path color_dir = dir / "rs/color/";
-            // fs::path depth_dir = dir / "rs/depth/";
-            // if (!last_frame.rs.img_c.empty())
-            //     cv::imwrite((color_dir / ("c_" + fmt.str() + ".jpg")).string(), last_frame.rs.img_c.clone());
-            // if (!last_frame.rs.img_d.empty())
-            //     cv::imwrite((depth_dir / ("d_" + fmt.str() + ".png")).string(), last_frame.rs.img_d.clone(), compression_params);
-            std::string color_file = "c_" + fmt.str() + ".jpg";
-            std::string depth_file = "d_" + fmt.str() + ".png";
-
             int64_t time_rs = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.rs.ts.time_since_epoch()).count();
-            
+
+            fmt % fid;
+
             if (!last_frame.rs.img_c.empty())
             {
+                std::string color_file = "c_" + fmt.str() + ".jpg";
+
                 outfile.open((dir / "rs/color.log").string(), std::ios_base::app);
                 outfile << color_file << ',' << std::to_string(time_rs) << '\n';
                 outfile.close();
+
                 cv::imwrite((dir / "rs/color/" / color_file).string(), last_frame.rs.img_c);
             }
+
             if (!last_frame.rs.img_d.empty())
             {
+                std::string depth_file = "d_" + fmt.str() + ".png";
+
                 outfile.open((dir / "rs/depth.log").string(), std::ios_base::app);
                 outfile << depth_file << ',' << std::to_string(time_rs) << '\n';
                 outfile.close();
+
                 cv::imwrite((dir / "rs/depth/" / depth_file).string(), last_frame.rs.img_d, compression_params);
             }
         }
@@ -387,9 +381,6 @@ void consume_purethermal(uls::SafeQueue<pt_frame_t> & q,
     std::vector<int> compression_params = {cv::IMWRITE_PNG_COMPRESSION, 0};
     
     std::ofstream outfile;
-    
-    // auto start = std::chrono::steady_clock::now();
-    // cv::Mat capture_img_prev;
 
     int fid = 0;
     while (sync.capture) // || q.size() > 0)
@@ -405,6 +396,8 @@ void consume_purethermal(uls::SafeQueue<pt_frame_t> & q,
 
         if (sync.save_started && !sync.save_suspended && !dir.empty())
         {
+            fmt % fid;
+            
             std::string thermal_file = "t_" + fmt.str() + ".png";
 
             int64_t time_pt = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.pt.ts.time_since_epoch()).count();
@@ -414,134 +407,11 @@ void consume_purethermal(uls::SafeQueue<pt_frame_t> & q,
             outfile.close();
 
             cv::imwrite((dir / "pt/thermal/" / thermal_file).string(), last_frame.pt.img, compression_params);
-            // long time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.pt.ts.time_since_epoch()).count();
-            // fmt % fid;
-            // outfile.open((dir / "pt/thermal.log").string(), std::ios_base::app);
-            // outfile << fmt.str() << ',' << std::to_string(time_ms) << '\n';
-            // outfile.close();
-            
-            // fs::path thermal_dir = dir / "pt/thermal/";
-            // cv::imwrite((thermal_dir / ("t_" + fmt.str() + ".png")).string(), last_frame.pt.img, compression_params);
         }
 
         fid++;
     }
 }
-
-/*
- * Dequeues purethermal's frames from a thread-safe queue.
- * 
- * It keeps consuming until the synchronization object tells it to stop.
- * 
- * @param q Is the safe-thread queue
- * @param is_capturing The boolean flag indicating if the function must keep dequeueing captured realsense frames
- * @param dir Directory where the function dequeues and saves captured frames
- * @param verbose Prints enqueuing information
- * @return
- */
-// void consume(uls::SafeQueue<rs_frame_t> & q_rs, 
-//              uls::SafeQueue<pt_frame_t> & q_pt, 
-//              frame_buffer_t & last_frame,
-//              synchronization_t & sync, 
-//              fs::path dir, 
-//             //  uls::MovementDetector md, 
-//              int duration,
-//              int64_t delay,
-//              bool verbose)
-// {
-//     std::vector<int> compression_params = {cv::IMWRITE_PNG_COMPRESSION, 0};
-    
-//     int fid = 0;
-//     boost::format fmt("%08d");
-//     std::ofstream outfile;
-    
-//     auto start = std::chrono::steady_clock::now();
-//     cv::Mat capture_img_prev;
-
-//     std::vector<rs_frame_t> buffer;
-//     while (sync.capture) try
-//     {
-//         pt_frame_t capture_pt = q_pt.dequeue();
-//         if (verbose)
-//             std::cout << "[RS+PT] CONSUMER <<D(pt) " << q_pt.size() << "+" << q_rs.size() << '\n';
-
-//         rs_frame_t closest_rs;
-
-//         // Process buffer
-//         int64_t min_diff = std::numeric_limits<int64_t>::max();
-//         for (int k = 0; k < buffer.size(); k++)
-//         {
-//             int64_t diff = std::chrono::duration_cast<std::chrono::milliseconds>(capture_pt.ts - buffer[k].ts).count();
-//             if (abs(diff) < min_diff)
-//             {
-//                 min_diff = abs(diff);
-//                 closest_rs = buffer[k];
-//             }
-//         }
-//         buffer.clear();
-
-//         // Process newly captured frames
-//         rs_frame_t capture_rs = q_rs.dequeue();
-//         if (verbose)
-//             std::cout << "[RS+PT] CONSUMER <<D(rs) " << q_pt.size() << "+" << q_rs.size() << '\n';
-
-//         int64_t diff = std::chrono::duration_cast<std::chrono::milliseconds>(capture_pt.ts - capture_rs.ts).count();        
-//         while (diff > -delay)
-//         {
-//             if (diff < delay)
-//             {
-//                 if (abs(diff) < min_diff)
-//                 {
-//                     min_diff = abs(diff);
-//                     closest_rs = capture_rs;
-//                     buffer.clear();
-//                     buffer.resize(1, closest_rs);
-//                 }
-//                 else
-//                 {
-//                     buffer.push_back(capture_rs);
-//                 }
-//             }
-
-//             capture_rs = q_rs.dequeue();
-//             if (verbose)
-//                 std::cout << "[RS+PT] CONSUMER <<D(rs) " << q_pt.size() << "+" << q_rs.size() << '\n';
-
-//             diff = std::chrono::duration_cast<std::chrono::milliseconds>(capture_pt.ts - capture_rs.ts).count();
-//         }
-
-//         // last frame is a struct that derives from mutex
-//         // last_frame.lock(); // make sure to lock before modifying the pair of (rs,pt) frames
-//         last_frame.pt = capture_pt;
-//         last_frame.rs = closest_rs;
-//         // last_frame.unlock();
-
-//         if (sync.save_started && !sync.save_suspended && !dir.empty())
-//         {
-//             int64_t time_pt = std::chrono::duration_cast<std::chrono::milliseconds>(capture_pt.ts.time_since_epoch()).count();
-//             fmt % fid;
-//             outfile.open((dir / "pt.log").string(), std::ios_base::app);
-//             outfile << fmt.str() << ',' << std::to_string(time_pt) << '\n';
-//             outfile.close();
-//             int64_t time_rs = std::chrono::duration_cast<std::chrono::milliseconds>(closest_rs.ts.time_since_epoch()).count();
-//             outfile.open((dir / "rs.log").string(), std::ios_base::app);
-//             outfile << fmt.str() << ',' << std::to_string(time_rs) << '\n';
-//             outfile.close();
-            
-//             std::cout << "Try to save " << capture_pt.img.size() << '%' << capture_rs.img_c.size() << '%' << capture_rs.img_d.size() << std::endl;
-//             // cv::imwrite((dir / "pt/thermal/" / ("t_" + fmt.str() + ".png")).string(), capture_pt.img, compression_params);
-//             // cv::imwrite((dir / "rs/color/" / ("c_" + fmt.str() + ".jpg")).string(), closest_rs.img_c);
-//             // cv::imwrite((dir / "rs/depth/" / ("d_" + fmt.str() + ".png")).string(), closest_rs.img_d, compression_params);
-//             std::cout << "Finished try" << std::endl;
-//         }
-            
-//         fid++;
-//     }         
-//     catch (uls::dequeue_error & e)
-//     {
-//         std::cout << e.what() << std::endl;
-//     }
-// }
 
 /*
  * Dequeues multimodal frames from a thread-safe queue.
@@ -558,9 +428,7 @@ void consume_purethermal(uls::SafeQueue<pt_frame_t> & q,
 void consume(uls::SafeQueue<std::pair<rs_frame_t,pt_frame_t> > & q,
              frame_buffer_t & last_frame,
              synchronization_t & sync, 
-             fs::path dir, 
-            //  uls::MovementDetector md, 
-            //  int duration,
+             fs::path dir,
              int64_t delay,
              boost::format fmt = boost::format("%08d"),
              bool verbose = false)
@@ -579,11 +447,15 @@ void consume(uls::SafeQueue<std::pair<rs_frame_t,pt_frame_t> > & q,
         std::pair<rs_frame_t,pt_frame_t> capture = q.dequeue();
 
         // TODO: lock? Does it cause deadlock with visualization thread?
+        last_frame.lock();
         last_frame.rs = capture.first;
         last_frame.pt = capture.second;
+        last_frame.unlock();
         
         if (sync.save_started && !sync.save_suspended && !dir.empty())
         {
+            fmt % fid;
+
             int64_t time_rs = std::chrono::duration_cast<std::chrono::milliseconds>(last_frame.rs.ts.time_since_epoch()).count();
 
             if (!last_frame.rs.img_c.empty())
@@ -689,35 +561,6 @@ void find_and_draw_chessboard(cv::Mat & img, cv::Size pattern_size, int flags = 
     cv::drawChessboardCorners(img, pattern_size, corners, found);
 }
 
-/*
- * Detection function to be run in a thread.
- * 
- * @param md The detector itself.
- * @param sync Synchronization flags to be modified according to the output of the detector.
- * @param frame Current frame to evaluate in the detector.
- * @param duration Keep the function going until duration is expired.
- * @return
- */
-// void detection(uls::MovementDetector & md, 
-//                synchronization_t & sync,
-//                frame_buffer_t & frame, 
-//                std::chrono::milliseconds duration)
-// {
-//     auto start = std::chrono::high_resolution_clock::now();
-//     while (sync.capture)
-//     {
-//         if (sync.save_started)
-//         {
-//             frame.lock();
-//             if ( !frame.pt.img.empty() && md.find(frame.pt.img) )
-//                 start = std::chrono::high_resolution_clock::now();
-//             frame.unlock();
-            
-//             std::chrono::duration<double,std::milli> elapsed (std::chrono::high_resolution_clock::now() - start);
-//             sync.save_suspended = (duration.count() > 0 && elapsed > duration);
-//         }
-//     }
-// }
 template <typename T>
 void detection(T & detector, 
                synchronization_t & sync,
@@ -755,10 +598,6 @@ void detection(T & detector,
  */
 void visualizer(std::string win_name,
                frame_buffer_t & frame,
-            //    rs_frame_t & rs_frame, 
-            //    pt_frame_t & pt_frame, 
-            //    std::mutex & m,
-            //    int modality_flags,
                synchronization_t & sync, 
                float depth_scale = 1.0,
                std::shared_ptr<std::map<std::string, uls::intrinsics_t> > intrinsics = NULL,
@@ -768,17 +607,11 @@ void visualizer(std::string win_name,
                bool hide_rgb = false
 )
 {
-    // bool use_depth = (modality_flags & USE_DEPTH) > 0;
     std::vector<cv::Mat> frames (4);
     while (sync.capture)
     {
         cv::Mat depth;
 
-        // m.lock();
-        // cv::Mat rs_c = rs_frame.img_c;
-        // cv::Mat rs_d = rs_frame.img_d;
-        // cv::Mat pt = pt_frame.img;
-        // m.unlock();
         frame.lock();
         cv::Mat rs_c = frame.rs.img_c;
         cv::Mat rs_d = frame.rs.img_d;
@@ -792,7 +625,7 @@ void visualizer(std::string win_name,
             if (intrinsics)
             {
                 color.create(rs_c.size(), rs_c.type());
-                cv::undistort(rs_c, color, (*intrinsics)["rs/color,rs/depth"].camera_matrix, (*intrinsics)["rs/color,rs/depth"].dist_coeffs);
+                cv::undistort(rs_c, color, (*intrinsics)["rs/color"].camera_matrix, (*intrinsics)["rs/color"].dist_coeffs);
             }
             else
                 color = rs_c.clone();
@@ -808,7 +641,7 @@ void visualizer(std::string win_name,
             if (intrinsics)
             {
                 depth.create(rs_d.size(), rs_d.type());
-                cv::undistort(rs_d, depth, (*intrinsics)["rs/color,rs/depth"].camera_matrix, (*intrinsics)["rs/color,rs/depth"].dist_coeffs);
+                cv::undistort(rs_d, depth, (*intrinsics)["rs/color"].camera_matrix, (*intrinsics)["rs/color"].dist_coeffs);
             }
             else
                 depth = rs_d.clone();
@@ -817,9 +650,7 @@ void visualizer(std::string win_name,
             uls::depth_to_8bit(depth, frames[1]);
         }
 
-
         // PureThermal-related preprocessing
-        // pt_frame_t pt_frame = q_pt.peek_back();
         if (!pt.empty())
         {
             cv::Mat therm, therm_a;
@@ -835,7 +666,7 @@ void visualizer(std::string win_name,
                 if (extrinsics && !depth.empty())
                 {
                     cv::Mat map_x, map_y;
-                    align_to_depth(depth, (*intrinsics)["rs/color,rs/depth"].camera_matrix, (*intrinsics)["pt/thermal"].camera_matrix, depth_scale, extrinsics, map_x, map_y);
+                    align_to_depth(depth, (*intrinsics)["rs/color"].camera_matrix, (*intrinsics)["pt/thermal"].camera_matrix, depth_scale, extrinsics, map_x, map_y);
                     cv::remap(therm, therm_a, map_x, map_y, cv::INTER_LINEAR, cv::BORDER_CONSTANT, 0);
 
                     frames[3] = therm_a;
@@ -924,13 +755,13 @@ int main(int argc, char * argv[]) try
     desc.add_options()
         ("help,h", "Print help messages")
         ("duration,d", po::value<int>()->default_value(8000), "Duration of the recording in milliseconds (ms)")
-        ("modalities,M", po::value<std::string>()->default_value("color,depth,thermal"), "Comma-separated list of modalities to capture")
+        ("prefixes", po::value<std::string>()->default_value("rs/color,rs/depth,pt/thermal"), "Comma-separated list of modalities to capture")
         ("find-pattern-on,F", po::value<std::string>()->implicit_value(""), "Comma-separated list of modalities to find pattern on (color and/or thermal)")
         ("pattern,p", po::value<std::string>()->default_value("8,7"), "Pattern size \"x,y\" squares")
         ("fps,f", po::value<int>()->default_value(30), "Acquisition speed (fps) of realsense (integer number 1~30)")
-        ("calibration-params", po::value<std::string>()->default_value(""), "Calibration mapping parameters")
+        ("calibration-file", po::value<std::string>()->default_value(""), "Calibration mapping parameters")
         ("sync-delay", po::value<int>()->default_value(30), "Maximum time delay between RS and PT (in milliseconds)")
-        ("md-duration", po::value<int>(), "When movement detected record during X millisecs")
+        ("md-duration", po::value<int>()->default_value(200), "When movement detected record during X millisecs")
         ("md-pixel-thresh", po::value<int>()->default_value(15), "When movement detected record during X millisecs")
         ("md-frame-ratio", po::value<float>()->default_value(0.01), "When movement detected record during X millisecs")
         ("hide-rgb,", po::bool_switch(&hide_rgb), "Hide RGB modality")
@@ -975,12 +806,12 @@ int main(int argc, char * argv[]) try
     int modality_flags = 0;
 
     std::vector<std::string> modalities;
-    boost::split(modalities, vm["modalities"].as<std::string>(), boost::is_any_of(","));
-    if (std::find(modalities.begin(), modalities.end(), "Color") != modalities.end()) 
+    boost::split(modalities, vm["prefixes"].as<std::string>(), boost::is_any_of(","));
+    if (std::find(modalities.begin(), modalities.end(), "rs/color") != modalities.end()) 
         modality_flags |= USE_COLOR;
-    if (std::find(modalities.begin(), modalities.end(), "Depth") != modalities.end()) 
+    if (std::find(modalities.begin(), modalities.end(), "rs/depth") != modalities.end()) 
         modality_flags |= USE_DEPTH;
-    if (std::find(modalities.begin(), modalities.end(), "Thermal") != modalities.end())    
+    if (std::find(modalities.begin(), modalities.end(), "pt/thermal") != modalities.end())    
         modality_flags |= USE_THERM;
     
     assert(modality_flags > 0);
@@ -993,9 +824,9 @@ int main(int argc, char * argv[]) try
     if (vm.find("find-pattern-on") != vm.end())
     {
         boost::split(find_pattern_on, vm["find-pattern-on"].as<std::string>(), boost::is_any_of(","));
-        if (std::find(find_pattern_on.begin(), find_pattern_on.end(), "Color") != find_pattern_on.end()) 
+        if (std::find(find_pattern_on.begin(), find_pattern_on.end(), "rs/color") != find_pattern_on.end()) 
             find_pattern_flags |= FIND_PATTERN_ON_COLOR;
-        if (std::find(find_pattern_on.begin(), find_pattern_on.end(), "Thermal") != find_pattern_on.end()) 
+        if (std::find(find_pattern_on.begin(), find_pattern_on.end(), "pt/thermal") != find_pattern_on.end()) 
             find_pattern_flags |= FIND_PATTERN_ON_THERM;
     }
 
@@ -1011,22 +842,43 @@ int main(int argc, char * argv[]) try
 
     cv::Size pattern_size (x,y);
 
+    std::map<std::string,std::string> calib_serials;
+
     std::shared_ptr<std::map<std::string,uls::intrinsics_t> > intrinsics;
     std::shared_ptr<uls::extrinsics_t> extrinsics;
-    if (!vm["calibration-params"].as<std::string>().empty())
+    
+    fs::path calibration_file_path (vm["calibration-file"].as<std::string>());
+    if (!calibration_file_path.empty())
     {
-        cv::FileStorage fs (vm["calibration-params"].as<std::string>(), cv::FileStorage::READ);
+        cv::FileStorage fs (vm["calibration-file"].as<std::string>(), cv::FileStorage::READ);
         if (fs.isOpened())
         {
-            std::string modality_1, modality_2;
-            fs["modality-1"] >> modality_1;
-            fs["modality-2"] >> modality_2;
-           
+            int num_prefixes;
+            fs["num_prefixes"] >> num_prefixes; // modalities
+        
             intrinsics = std::make_shared<std::map<std::string,uls::intrinsics_t> >();
-            fs["camera_matrix-1"] >> (*intrinsics)[modality_1].camera_matrix;
-            fs["camera_matrix-2"] >> (*intrinsics)[modality_2].camera_matrix;
-            fs["dist_coeffs-1"]   >> (*intrinsics)[modality_1].dist_coeffs;
-            fs["dist_coeffs-2"]   >> (*intrinsics)[modality_2].dist_coeffs;
+            for (int i = 1; i <= num_prefixes; i++)
+            {
+                std::string prefix;
+                fs["prefix-" + std::to_string(i)] >> prefix;
+
+                fs["serial_number-" + std::to_string(i)] >> calib_serials[prefix];
+            
+                fs["camera_matrix-" + std::to_string(i)] >> (*intrinsics)[prefix].camera_matrix;
+                fs["dist_coeffs-" + std::to_string(i)]   >> (*intrinsics)[prefix].dist_coeffs;
+            }
+            // std::string modality_1, modality_2;
+            // fs["modality-1"] >> modality_1;
+            // fs["modality-2"] >> modality_2;
+
+            // fs["serial_number-1"] >> calib_serials[modality_1];
+            // fs["serial_number-2"] >> calib_serials[modality_2];
+           
+            // intrinsics = std::make_shared<std::map<std::string,uls::intrinsics_t> >();
+            // fs["camera_matrix-1"] >> (*intrinsics)[modality_1].camera_matrix;
+            // fs["camera_matrix-2"] >> (*intrinsics)[modality_2].camera_matrix;
+            // fs["dist_coeffs-1"]   >> (*intrinsics)[modality_1].dist_coeffs;
+            // fs["dist_coeffs-2"]   >> (*intrinsics)[modality_2].dist_coeffs;
 
             extrinsics = std::make_shared<uls::extrinsics_t>();
             fs["R"] >> extrinsics->R;
@@ -1052,7 +904,19 @@ int main(int argc, char * argv[]) try
     if (modality_flags & (USE_COLOR | USE_DEPTH))
     {
         profile = pipe_rs.start(cfg_rs);
-        if (modality_flags & USE_DEPTH) depth_scale = rs_help::get_depth_scale(profile.get_device());
+        if (calib_serials.find("rs/color") != calib_serials.end())
+        {
+            std::string captur_serial_rs = profile.get_device().get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+            if (calib_serials["rs/color"] != captur_serial_rs)
+            {
+                std::cerr << "RS's capturing and calibration devices do not match serial numbers: " 
+                          << captur_serial_rs << " and " << calib_serials["rs/color"] << std::endl;
+                return EXIT_FAILURE;
+            }
+        }
+
+        if (modality_flags & USE_DEPTH) 
+            depth_scale = rs_help::get_depth_scale(profile.get_device());
     }
 
     // PureThermal pipeline (config and start)
@@ -1061,7 +925,9 @@ int main(int argc, char * argv[]) try
     cfg_pt.set_stream(160, 120);
 
     if (modality_flags & USE_THERM)
+    {
         pipe_pt.start(cfg_pt);
+    }
 
     if (verbosity > 1) 
         std::cout << "[Main] Devices initialized ...\n";
@@ -1076,45 +942,40 @@ int main(int argc, char * argv[]) try
     fs::path parent (vm["output-dir"].as<std::string>());
     if (!parent.empty())
     {
+        parent = parent / date_and_time;
+
         if (verbosity > 1) 
             std::cout << "[Main] Creating output directory structure ...\n";
 
-        parent = parent / fs::path(date_and_time);
+        // create a directory to save frames of each of the specified modalities (prefixes)
+        if (modality_flags & USE_COLOR) 
+            boost::filesystem::create_directories(parent / fs::path("rs/color/"));
+        if (modality_flags & USE_DEPTH) 
+            boost::filesystem::create_directories(parent / fs::path("rs/depth/"));
+        if (modality_flags & USE_THERM) 
+            boost::filesystem::create_directories(parent / fs::path("pt/thermal/"));
+
+        // if RS is used, keep a copy with its info in the sequence directory: rs_info.yml
         if (modality_flags & (USE_DEPTH | USE_COLOR) )
         {
-            if (modality_flags & USE_COLOR) 
-                boost::filesystem::create_directories(parent / fs::path("rs/color/"));
-            if (modality_flags & USE_DEPTH) 
-                boost::filesystem::create_directories(parent / fs::path("rs/depth/"));
-            
-            cv::FileStorage fs ((parent / fs::path("rs_info.yml")).string(), cv::FileStorage::WRITE);
+            cv::FileStorage fs ((parent / "rs_info.yml").string(), cv::FileStorage::WRITE);
             if (fs.isOpened())
             {
-                fs << "rs-serial_number" << profile.get_device().get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-                fs << "rs-depth_scale" << depth_scale;
+                fs << "serial_number" << profile.get_device().get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+                fs << "depth_scale" << depth_scale;
                 // ...
                 fs.release();
             }
         }
-        if (modality_flags & USE_THERM) 
-        {
-            boost::filesystem::create_directories(parent / fs::path("pt/thermal/"));
-            // cv::FileStorage fs ((parent / fs::path("devices_info.yml")).string(), cv::FileStorage::APPEND);
-            // if (fs.isOpened())
-            // {
-            //     fs << "pt-serial_number" << ""; // to keep generality (serial number is not provided by PT)
-            //     // ...
-            //     fs.release();
-            // }
-        }
-
+        
+        // if extrinsics are set, keep a copy of them in the sequence directory: calibration.yml
         if (extrinsics)
         {
-            fs::path calibration_params_path (vm["calibration-params"].as<std::string>());
-            fs::copy_file(calibration_params_path, (parent / fs::path("calibration.yml")).string());
-            cv::FileStorage fs ((parent / fs::path("calibration.yml")).string(), cv::FileStorage::APPEND);
+            fs::copy_file(calibration_file_path, parent / "calibration.yml");
+
+            cv::FileStorage fs ((parent / "calibration.yml").string(), cv::FileStorage::APPEND);
             if (fs.isOpened())
-                fs << "original_file" << fs::basename(calibration_params_path);
+                fs << "original_file" << fs::basename(calibration_file_path);
                 fs.release();
         }
 
@@ -1122,9 +983,7 @@ int main(int argc, char * argv[]) try
             std::cout << "[Main] Output directory structure \"" << parent.string() << "\"created\n";
     }
 
-    /*
-     * Initialize consumer-producer queues
-     */
+    /* Initialize consumer-producer queue */
 
     std::thread p_rs_thr, p_pt_thr, p_thr; // producers
     std::thread c_thr; // consumer
@@ -1191,15 +1050,6 @@ int main(int argc, char * argv[]) try
     // Create a consumer thread to process  produced frames (both rs and pt or only rs/pt)
     if ((modality_flags & (USE_COLOR | USE_DEPTH)) > 0 && (modality_flags & USE_THERM) > 0)
     {
-        // c_thr = std::thread(consume, 
-        //                     std::ref(prod_to_cons_rs), 
-        //                     std::ref(prod_to_cons_pt), 
-        //                     std::ref(last_frame),
-        //                     std::ref(sync), 
-        //                     parent, 
-        //                     vm["md-duration"].as<int>(), 
-        //                     vm["sync-delay"].as<int>(), 
-        //                     verbosity > 2);
         c_thr = std::thread(consume, 
                     std::ref(prod_to_cons), 
                     std::ref(last_frame),
@@ -1274,8 +1124,12 @@ int main(int argc, char * argv[]) try
     capture_timer.join();
     c_thr.join();
     md_thr.join();
-    p_rs_thr.join();
-    p_pt_thr.join();
+    if ((modality_flags & (USE_COLOR | USE_DEPTH)) > 0 && (modality_flags & USE_THERM) > 0)
+        p_thr.join();
+    else if (modality_flags & (USE_COLOR | USE_DEPTH))
+        p_rs_thr.join();
+    else
+        p_pt_thr.join();
 
     if (verbosity > 1) 
         std::cout << "[Main] All threads joined ...\n";

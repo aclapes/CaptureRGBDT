@@ -4,20 +4,14 @@
 #include <opencv2/opencv.hpp>
 #include <boost/filesystem.hpp>
 #include <ctime>   // localtime
-#include <sstream> // stringstream
-#include <iomanip> // put_time
 #include <string>  // string
 #include <boost/format.hpp>
 #include <boost/iterator.hpp>
-#include <boost/foreach.hpp>
 #include <boost/program_options.hpp>
-#include <boost/progress.hpp>
 #include <boost/algorithm/string.hpp>
 
 #include "utils/common.hpp"
 #include "utils/calibration.hpp"
-
-bool debug = true;
 
 namespace po = boost::program_options;
 namespace fs = boost::filesystem;
@@ -135,37 +129,26 @@ int main(int argc, char * argv[]) try
     /*   Command line argument parsing  */
     /* -------------------------------- */
     
-    std::string input_list_file_str;
-    // std::string modality_str; // sub by prefix
+    std::string input;
     std::string prefix;
-    std::string output_file_str;
+    std::string output_filepath;
     int verbose;
 
     po::options_description desc("Program options");
     desc.add_options()
         ("help,h", "Print help messages")
-        // ("corners,c", po::value<std::string>()->default_value("./corners.yml"), "")
-        // ("corner-selection,s", po::value<std::string>()->default_value("./corner-selection.yml"), "")
-        // ("intrinsics,i", po::value<std::string>()->default_value("./intrinsics.yml"), "")
-        // ("modality,m", po::value<std::string>()->default_value("Thermal"), "Visual modality")
-        ("input-file-or-dir", po::value<std::string>(&input_list_file_str)->required(), "File containing list of calibration sequence directories")
+        ("input", po::value<std::string>(&input)->required(), "File containing list of calibration sequence directories")
         ("prefix,p", po::value<std::string>(&prefix)->required(), "Prefix")
-        ("output-file", po::value<std::string>(&output_file_str)->required(), "Output file")
-        // ("log-file,l", po::value<std::string>()->default_value(""), "Log file (e.g. rs.log)")
-        // ("file-ext,x", po::value<std::string>()->default_value(".jpg"), "Image file extension")
+        ("output-filepath", po::value<std::string>(&output_filepath)->required(), "Output file")
         ("pattern-size,s", po::value<std::string>()->default_value("11,8"), "Pattern size \"x,y\" squares")
         ("resize-dims,r", po::value<std::string>()->default_value("960,720"), "Resize frame to (h,w)")
-        //  ("y-shift,y", po::value<int>()->default_value(0), "Y-shift")
-        // ("verbose,v", po::bool_switch(&verbose), "Verbosity")
         ("verbose,v", po::value<int>()->default_value(0), "")
-        // ("modality", po::value<std::string>(&modality_str)->required(), "Modality (either Color or Thermal)")
         ;
-
     
     po::positional_options_description positional_options; 
-    positional_options.add("input-file-or-dir", 1); 
+    positional_options.add("input", 1); 
     positional_options.add("prefix", 1); 
-    positional_options.add("output-file", 1); 
+    positional_options.add("output-filepath", 1); 
 
     po::variables_map vm;
     po::store(po::command_line_parser(argc, argv).options(desc).positional(positional_options).run(), vm); // can throw
@@ -229,16 +212,16 @@ int main(int argc, char * argv[]) try
     // a file listing diretories or a directory of directories
     std::vector<std::string> sequence_dirs;
 
-    fs::path input_p (input_list_file_str);
-    if (fs::is_directory(input_p))  // if a directory
+    fs::path input_path (input);
+    if (fs::is_directory(input_path))  // if a directory
     {
-        for(auto& entry : boost::make_iterator_range(fs::directory_iterator(input_p), {}))
+        for(auto& entry : boost::make_iterator_range(fs::directory_iterator(input_path), {}))
             sequence_dirs.push_back(entry.path().string());
     }
     else  // if a file
     {
         std::ifstream dir_list_reader;
-        dir_list_reader.open(input_list_file_str);
+        dir_list_reader.open(input);
         if (dir_list_reader.is_open())
         {
             std::string line;
@@ -250,7 +233,7 @@ int main(int argc, char * argv[]) try
     
     if (sequence_dirs.empty())
     {
-        std::cerr << "Calibration file (input-file-or-dir argument) not found." << std::endl;
+        std::cerr << "Calibration file (''--input'' argument) not found." << std::endl;
         return EXIT_FAILURE;
     }
     
@@ -264,37 +247,34 @@ int main(int argc, char * argv[]) try
         sequences[dir_path] = s;
     }
 
-    cv::FileStorage fstorage (vm["output-file"].as<std::string>(), cv::FileStorage::WRITE);
+    cv::FileStorage fstorage (output_filepath, cv::FileStorage::WRITE);
     fstorage << "nb_sequences" << ((int) sequence_dirs.size());
     fstorage << "prefix" << prefix;
     fstorage << "pattern_size" << pattern_size;
     fstorage << "resize_dims" << resize_dims;
-    // fstorage << "modality" << vm["prefix"].as<std::string>(); //modality_str;
-    // fstorage << "y-shift" << vm["y-shift"].as<int>();
-    // fstorage << "log-file" << vm["log-file"].as<std::string>();
-    // fstorage << "file-extension" << vm["file-ext"].as<std::string>();
+    
+    std::string serial_number; // i'll be checked at each iteration. it needs to be coherent!
 
-    // // std::vector<int> frames_ids; // keep track
-    // // boost::progress_display pd (sequences.size());
     std::map<std::string, std::vector<std::string> >::iterator it;
     int i;
-    std::string serial_number;
-
     for (it = sequences.begin(), i = 0; it != sequences.end(); it++, i++)
     {
-        cv::FileStorage fs ( (fs::path(it->first) / fs::path("rs_info.yml")).string(), cv::FileStorage::READ );
-        if (fs.isOpened())
+        if (prefix == "rs/color")
         {
-            std::string curr_serial_number;
-            fs["serial_number"] >> curr_serial_number;
-
-            if (serial_number.empty())
-                serial_number = curr_serial_number;
-            else if (serial_number != curr_serial_number)
+            cv::FileStorage fs ( (fs::path(it->first) / "rs_info.yml").string(), cv::FileStorage::READ );
+            if (fs.isOpened())
             {
-                std::cerr << "Calibration sequences from different sensors cannot be mixed: " 
-                          << serial_number << " and " << curr_serial_number << std::endl;
-                return EXIT_FAILURE;
+                std::string curr_serial_number;
+                fs["serial_number"] >> curr_serial_number;
+
+                if (serial_number.empty())
+                    serial_number = curr_serial_number;
+                else if (serial_number != curr_serial_number)
+                {
+                    std::cerr << "Calibration sequences from different sensors cannot be mixed: " 
+                            << serial_number << " and " << curr_serial_number << std::endl;
+                    return EXIT_FAILURE;
+                }
             }
         }
 
@@ -333,14 +313,14 @@ int main(int argc, char * argv[]) try
         {   
             frames_corners[k].reshape(2,1).copyTo(corners.row(k)); // reshape to 2 channels, 1 column (the number of rows is inferred)
             
-            if (fs::is_directory(input_p))
-                frames_paths[k] = fs::relative(it->second[frames_ids[k]], input_p).string();
+            if (fs::is_directory(input_path))
+                frames_paths[k] = fs::relative(it->second[frames_ids[k]], input_path).string();
             else
                 frames_paths[k] = it->second[frames_ids[k]];
         }
 
         std::string id = std::to_string(i);
-        fstorage << ("sequence_dir-" + id) << (fs::is_directory(input_p) ? fs::relative(it->first, input_p).string() : it->first);
+        fstorage << ("sequence_dir-" + id) << (fs::is_directory(input_path) ? fs::relative(it->first, input_path).string() : it->first);
         fstorage << ("corners-" + id) << corners;
         fstorage << ("frames-" + id)  << frames_paths;
 

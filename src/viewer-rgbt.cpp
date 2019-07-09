@@ -6,9 +6,6 @@
 #include <thread>
 #include <opencv2/opencv.hpp>
 #include <boost/filesystem.hpp>
-#include <ctime>   // localtime
-#include <sstream> // stringstream
-#include <iomanip> // put_time
 #include <string>  // string
 #include <boost/format.hpp>
 #include <boost/program_options.hpp>
@@ -16,8 +13,6 @@
 #include "utils/common.hpp"
 #include "utils/calibration.hpp"
 #include "utils/synchronization.hpp"
-
-bool debug = true;
 
 namespace po = boost::program_options;
 namespace fs = boost::filesystem;
@@ -28,52 +23,8 @@ namespace
   const size_t SUCCESS = 0; 
   const size_t ERROR_UNHANDLED_EXCEPTION = 2; 
  
-} // namespace
+}
 
-// std::vector<std::string> tokenize(std::string s, std::string delimiter)
-// {
-//     std::vector<std::string> tokens;
-
-//     size_t pos = 0;
-//     std::string token;
-//     while ((pos = s.find(delimiter)) != std::string::npos) 
-//     {
-//         token = s.substr(0, pos);
-//         tokens.push_back(token);
-//         s.erase(0, pos + delimiter.length());
-//     }
-//     tokens.push_back(s); // last token
-
-//     return tokens;
-// }
-
-// uls::Timestamp process_log_line(std::string line)
-// {
-//     std::vector<std::string> tokens = tokenize(line, ",");
-
-//     uls::Timestamp ts;
-//     ts.id = tokens.at(0);
-//     std::istringstream iss (tokens.at(1));
-//     iss >> ts.time;
-    
-//     return ts;
-// }
-// 
-// std::vector<uls::Timestamp> read_log(fs::path log_path)
-// {
-//     std::ifstream log (log_path.string());
-//     std::string line;
-//     std::vector<uls::Timestamp> tokenized_lines;
-//     if (log.is_open()) {
-//         while (std::getline(log, line)) {
-//             uls::Timestamp ts = process_log_line(line);
-//             tokenized_lines.push_back(ts);
-//         }
-//         log.close();
-//     }
-
-//     return tokenized_lines;
-// }
 
 int main(int argc, char * argv[]) try
 {
@@ -125,10 +76,9 @@ int main(int argc, char * argv[]) try
     fs::path log_depth_path (input_path / "rs/depth.log");
     fs::path log_thermal_path (input_path / "pt/thermal.log");
 
-    fs::path calib_filepath;
     fs::path calib_file (vm["calibration-file"].as<std::string>());
-    if (!calib_file.empty())
-        calib_filepath = input_path / "calibration.yml";
+    if (!fs::exists(calib_file))
+        calib_file = input_path / "calibration.yml";
 
     // cv::namedWindow("Viewer");
     float fps = vm["fps"].as<float>();
@@ -139,17 +89,17 @@ int main(int argc, char * argv[]) try
     cv::FileStorage fs;
 
     std::string rs_serial_number;
-    float depth_scale;
+    float depth_scale = 1e-3;
     if (fs.open(info_path.string(), cv::FileStorage::READ))
     {
-        fs["rs-serial_number"] >> rs_serial_number;
-        fs["rs-depth_scale"] >> depth_scale;
+        fs["serial_number"] >> rs_serial_number;
+        fs["depth_scale"] >> depth_scale;
         fs.release();
     }
 
     std::shared_ptr<std::map<std::string,uls::intrinsics_t> > intrinsics;
     std::shared_ptr<uls::extrinsics_t> extrinsics;
-    if (fs.open(calib_filepath.string(), cv::FileStorage::READ))
+    if (fs.open(calib_file.string(), cv::FileStorage::READ))
     {
         std::string modality_1, modality_2;
         fs["modality-1"] >> modality_1;
